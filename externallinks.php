@@ -93,7 +93,8 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     
     $dblocal = new Database( 'tools-db', $toolserver_username2, $toolserver_password2, 'cyberbot' );
     $dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
-	$pagebuffer = array();
+    $pagebuffer = array();
+    $temp = array();
 		
     $exceptions = $site->initPage( 'User:Cyberpower678/spam-exception.js' )->get_text();
     file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/exceptionsraw', $exceptions );
