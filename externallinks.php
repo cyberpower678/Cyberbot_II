@@ -271,6 +271,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     $i = 0;
     foreach( $pagebuffer as $id=>$page ) {
         $i++;
+        if( empty($page['urls']) || !isset($page['urls']) ) {unset( $pagebuffer[$id] ); continue;}
         //check if it has been whitelisted/deblacklisted during the database scan and make sure it isn't catching itself.
         $pagedata = $site->initPage( null, $id )->get_text();
         preg_match( '/\{\{Blacklisted\-links\|(1\=)?(\n)?((.(\n)?)*?)\|bot\=Cyberbot II(\|invisible=(.*?))?\}\}(\n)?/i', $pagedata, $template );
@@ -340,7 +341,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             $talkout .= "This, however, doesn't necessaryily mean it's spam, or not a good link.\n";
             $talkout .= "If the link is a good link, you may wish to request whitelisting by going to the [[MediaWiki talk:Spam-whitelist|request page for whitelisting]].\n";
             $talkout .= "If you feel the link being caught by the blacklist is a false positive, or no longer needed on the blacklist, you may request the regex be removed or altered at the [[MediaWiki talk:Spam-blacklist|blacklist request page]].\n";
-            $talkout .= "If the link is blacklisted globally and you feel the above applies you may request to whitelist it using the before mentioned request page, or request it's removal, or alteration, at the [[meta:Talk:Spam Blacklist|request page on meta]].\n";
+            $talkout .= "If the link is blacklisted globally and you feel the above applies you may request to whitelist it using the before mentioned request page, or request its removal, or alteration, at the [[meta:Talk:Spam Blacklist|request page on meta]].\n";
             $talkout .= "When requesting whitelisting, be sure to supply the link to be whitelisted and wrap the link in nowiki tags.\n";
             $talkout .= "The whitelisting process can take its time so once a request has been filled out, you may set the invisible parameter on the tag to true.\nPlease be aware that the bot will replace removed tags, and will remove misplaced tags regularly.\n\n";
             $talkout .= "'''Below is a list of links that were found on the main page:'''\n".$out2;
