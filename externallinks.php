@@ -257,12 +257,31 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     unset( $rundata['starttime'] );
     
     findrule:
-    $status = array( 'status' => 'process', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"x", 'scantype'=>'x' );
+    $globalblacklistregexarray = explode( "\n", $site2->initPage( 'Spam blacklist' )->get_text() );                                                                     
+    $blacklistregexarray = explode( "\n", $site->initPage( 'MediaWiki:Spam-blacklist' )->get_text() );
+    $whitelistregex = buildSafeRegexes( explode( "\n", $site->initPage( 'MediaWiki:Spam-whitelist' )->get_text() ) );
+
+    $starttime = time();
+    $i = 0;
+    $count = count( $pagebuffer );
+    $status = array( 'status' => 'process', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"0% (0 of $count)", 'scantype'=>'x' );
     updateStatus();
+    
+    //Check to make sure some things are still updated.  Remove outdated entries.
+    $i = 0;
     foreach( $pagebuffer as $id=>$page ) {
-        if( empty($page['urls']) || !isset($page['urls']) ) {unset( $pagebuffer[$id] ); continue;}
+        $i++;
+        //check if it has been whitelisted/deblacklisted during the database scan and make sure it isn't catching itself.
+        $pagedata = $site->initPage( null, $id )->get_text();
+        preg_match( '/\{\{Blacklisted\-links\|(1\=)?(\n)?((.(\n)?)*?)\|bot\=Cyberbot II(\|invisible=(.*?))?\}\}(\n)?/i', $pagedata, $template );
+        $pagedata = str_replace( $template[0], "", $pagedata );
+        foreach( $page['urls'] as $id2=>$url ) if( $pagebuffer[$id]['rules'][$id2]=findRule( $url ) === false || isWhitelisted( $url ) || strpos( $pagedata, $url ) === false ) unset( $pagebuffer[$id]['urls'][$id2] );
         if( isset( $pagebuffer[$id]['object'] ) ) unset( $pagebuffer[$id]['object'] );
-        foreach( $page['urls'] as $id2=>$url ) $pagebuffer[$id]['rules'][$id2]=findRule( $url );
+        if( empty($page['urls']) || !isset($page['urls']) ) unset( $pagebuffer[$id] );
+        $completed = ($i/$count)*100;
+        $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime); 
+        $status = array( 'status' => 'process', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($i of $count)", 'scantype'=>'x', 'scaneta'=>round($completedin, 0) ); 
+        updateStatus();
     }
        
     echo "Added $a links to the local database!\n";
@@ -301,7 +320,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             if( trim( $out2 ) == trim( "\n".$linkstrings ) ) {
                 goto placenotice;
             }
-            $out = str_replace( trim( $linkstrings, '\n' ), trim( $out2, '\n' ), $template );
+            $out = str_replace( trim( "\n".$linkstrings ), trim( $out2 ), $template );
             $buffer = str_replace( $template, $out, $buffer );
             $pageobject->edit( $buffer, "Updating {{[[Template:Blacklisted-links|Blacklisted-links]]}}.", true );      
         } else {
@@ -388,8 +407,15 @@ function findRule( $link ) {
     foreach( $lines as $id=>$line ) {
         if( preg_match( $regexStart . str_replace( '/', '\/', preg_replace('|\\\*/|u', '/', $line) ) . $regexEnd, $link ) ) return array( 'blacklist'=>'global', 'rule'=>str_replace( '|', '&#124;', $line ) );
     }
-    return array( 'blacklist'=>'unknown', 'rule'=>'unknown' );
+    return false;
 }
+//Check if it's whitelisted since we started this run.
+function isWhitelisted( $url ) {
+    global $whitelistregex;
+    foreach( $whitelistregex as $wregex ) if( preg_match($wregex, $link) ) return true;
+    return false;
+}
+
 //This scans the links with the regexes on the blacklist.  If it finds a match, it scans the whitelist to see if it should be ignored.
 function regexscan( $link ) {
     global $blacklistregex, $whitelistregex;
