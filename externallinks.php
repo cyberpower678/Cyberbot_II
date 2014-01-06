@@ -162,7 +162,8 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             $i++;
             $completed = ($i/$linkcount[0]['count'])*100;
             $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime);
-            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($i of {$linkcount[0]['count']})", 'scantype'=>'local', 'scaneta'=>round($completedin, 0) );
+            $completedby = time() + $completedin;
+            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($i of {$linkcount[0]['count']})", 'scantype'=>'local', 'scaneta'=>round($completedby, 0) );
             updateStatus();
         }
         $offset += 5000;
@@ -246,7 +247,8 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             $rundata['offset'] = $offset;
             $completed = ($offset/$linkcount[0]['count'])*100;
             $completedin = 2*((((time() - $starttime)*100)/$completed)-(time() - $starttime));
-            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($offset of {$linkcount[0]['count']})", 'scantype'=>'replica', 'scaneta'=>round($completedin, 0) );
+            $completedby = time() + $completedin;
+            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($offset of {$linkcount[0]['count']})", 'scantype'=>'replica', 'scaneta'=>round($completedby, 0) );
             updateStatus();
             updateData();
         }
@@ -281,7 +283,8 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         if( empty($page['urls']) || !isset($page['urls']) ) unset( $pagebuffer[$id] );
         $completed = ($i/$count)*100;
         $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime); 
-        $status = array( 'status' => 'process', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($i of $count)", 'scantype'=>'x', 'scaneta'=>round($completedin, 0) ); 
+        $completedby = time() + $completedin;
+        $status = array( 'status' => 'process', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($i of $count)", 'scantype'=>'x', 'scaneta'=>round($completedby, 0) ); 
         updateStatus();
     }
        
@@ -310,7 +313,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             $out2 .= "\n*$url";
             $out2 .= "\n*:''Triggered by <code>{$page['rules'][$l]['rule']}</code> on the {$page['rules'][$l]['blacklist']} blacklist''";    
         }
-        $out .= "$out2|bot=Cyberbot II}}\n";
+        $out .= "$out2|bot=Cyberbot II|invisible=false}}\n";
         $templates = $pageobject->get_templates();
         $buffer = $pageobject->get_text();
         if( $buffer == "" || is_null( $buffer ) ) continue;
@@ -349,8 +352,9 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             if( $talkpagedata === false ) $talkpageobject->newsection( $talkout, "Blacklisted Links Found on the Main Page", "Notification of blacklisted links on the main page." );
         }
         $completed = ($i/$count)*100;
-        $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime); 
-        $status = array( 'status' => 'tag', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"x", 'scantype'=>'x', 'editprogress'=>round($completed, 3)."% ($i of $count)", 'editeta'=>round($completedin, 0) ); 
+        $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime);
+        $completedby = time() + $completedin; 
+        $status = array( 'status' => 'tag', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"x", 'scantype'=>'x', 'editprogress'=>round($completed, 3)."% ($i of $count)", 'editeta'=>round($completedby, 0) ); 
         updateStatus();   
     }
 
@@ -381,8 +385,9 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             }
         }
         $completed = ($i/$count)*100;
-        $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime); 
-        $status = array( 'status' => 'remove', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"x", 'scantype'=>'x', 'editprogress'=>round($completed, 3)."% ($i of $count)", 'editeta'=>round($completedin, 0) ); 
+        $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime);
+        $completedby = time() + $completedin; 
+        $status = array( 'status' => 'remove', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"x", 'scantype'=>'x', 'editprogress'=>round($completed, 3)."% ($i of $count)", 'editeta'=>round($completedby, 0) ); 
         updateStatus();
     }
     $status = array( 'status' => 'idle', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"x", 'scantype'=>'x' );
