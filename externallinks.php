@@ -418,7 +418,7 @@ function findRule( $link ) {
 //Check if it's whitelisted since we started this run.
 function isWhitelisted( $url ) {
     global $whitelistregex;
-    foreach( $whitelistregex as $wregex ) if( preg_match($wregex, $link) ) return true;
+    foreach( $whitelistregex as $wregex ) if( preg_match($wregex, $url) ) return true;
     return false;
 }
 
