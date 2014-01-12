@@ -277,8 +277,8 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         //check if it has been whitelisted/deblacklisted during the database scan and make sure it isn't catching itself.
         $pagedata = $site->initPage( null, $id )->get_text();
         preg_match( '/\{\{Blacklisted\-links\|(1\=)?(\n)?((.(\n)?)*?)\|bot\=Cyberbot II(\|invisible=(.*?))?\}\}(\n)?/i', $pagedata, $template );
-        $pagedata = str_replace( $template[0], "", $pagedata );
-        foreach( $page['urls'] as $id2=>$url ) if( $pagebuffer[$id]['rules'][$id2]=findRule( $url ) === false || isWhitelisted( $url ) || strpos( $pagedata, $url ) === false ) unset( $pagebuffer[$id]['urls'][$id2] );
+        if( isset( $template[0] ) ) $pagedata = str_replace( $template[0], "", $pagedata );
+        foreach( $page['urls'] as $id2=>$url ) if( ($pagebuffer[$id]['rules'][$id2]=findRule( $url )) === false || isWhitelisted( $url ) || strpos( $pagedata, $url ) === false ) unset( $pagebuffer[$id]['urls'][$id2] );
         if( isset( $pagebuffer[$id]['object'] ) ) unset( $pagebuffer[$id]['object'] );
         if( empty($page['urls']) || !isset($page['urls']) ) unset( $pagebuffer[$id] );
         $completed = ($i/$count)*100;
