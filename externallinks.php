@@ -20,7 +20,24 @@ if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
     $e = $status['blexception'];
     file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/sbstatus', serialize(array( 'status' => 'recover', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>'x', 'scantype'=>'x' )) );
     if( !file_exists( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer') ) goto normalrun;
-    else $pagebuffer = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer') );
+    else {
+        $pagebuffer = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer' ) );
+        if( !$pagebuffer ) {
+            //Attempt retrieving file slice for slice.
+            $offset = 0;
+            $string = "";
+            $size = filesize( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer' );
+            while( $offset < $size ) {
+                $string .= file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer', false, null, $offset, 10000 );
+                $offset += 10000;
+            }
+            unset( $offset, $size );
+            if( !($pagebuffer = unserialize( $string ) ) ) {
+                unset( $string );
+                goto normalrun;
+            }
+            unset( $string );
+        }
     if( !is_array( $pagebuffer ) ) goto normalrun;
     if( !file_exists( '/data/project/cyberbot/CyberbotII/spambotdata/rundata') ) goto normalrun;
     else $rundata = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/rundata') );
@@ -31,6 +48,7 @@ if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
     else $blacklistregex = $rundata['blacklist'];
     if( !file_exists( '/data/project/cyberbot/CyberbotII/spambotdata/exceptions.wl' ) ) goto normalrun;
     else $exceptions = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/exceptions.wl' ) );
+    if( !$exceptions ) goto normalrun;
     if( !isset( $rundata['blacklistregex'] ) ) goto normalrun;
     else $blacklistregexarray = $rundata['blacklistregex'];
     if( !isset( $rundata['globalblacklistregex'] ) ) goto normalrun;
@@ -280,7 +298,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         if( isset( $template[0] ) ) $pagedata = str_replace( $template[0], "", $pagedata );
         foreach( $page['urls'] as $id2=>$url ) if( ($pagebuffer[$id]['rules'][$id2]=findRule( $url )) === false || isWhitelisted( $url ) || strpos( $pagedata, $url ) === false ) unset( $pagebuffer[$id]['urls'][$id2] );
         if( isset( $pagebuffer[$id]['object'] ) ) unset( $pagebuffer[$id]['object'] );
-        if( empty($page['urls']) || !isset($page['urls']) ) unset( $pagebuffer[$id] );
+        if( empty($pagebuffer[$id]['urls']) || !isset($pagebuffer[$id]['urls']) ) unset( $pagebuffer[$id] );
         $completed = ($i/$count)*100;
         $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime); 
         $completedby = time() + $completedin;
