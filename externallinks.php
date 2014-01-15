@@ -38,6 +38,7 @@ if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
             }
             unset( $string );
         }
+    }
     if( !is_array( $pagebuffer ) ) goto normalrun;
     if( !file_exists( '/data/project/cyberbot/CyberbotII/spambotdata/rundata') ) goto normalrun;
     else $rundata = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/rundata') );
