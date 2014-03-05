@@ -4,7 +4,6 @@ ini_set('memory_limit','5G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once('/data/project/cyberbot/Peachy/Init.php' );
 require_once('/data/project/cyberbot/database.inc');
-require_once('/data/project/cyberbot/database2.inc');
 
 $site2 = Peachy::newWiki( "meta" );
 $site = Peachy::newWiki( "cyberbotii" );
@@ -56,7 +55,7 @@ if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
     else $globalblacklistregexarray = $rundata['globalblacklistregex'];
     if( !isset( $rundata['whitelistregex'] ) ) goto normalrun;
     else $whitelistregexarray = $rundata['whitelistregex'];
-    $dblocal = new Database( 'tools-db', $toolserver_username2, $toolserver_password2, 'cyberbot' );
+    $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
     $dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
 }
 if( isset( $status['status'] ) && $status['status'] == 'scan' && $status['scantype'] == 'local' ) {
@@ -110,7 +109,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     $rundata['whitelist'] = $whitelistregex;
     $rundata['whitelistregex'] = $whitelistregexarray;
     
-    $dblocal = new Database( 'tools-db', $toolserver_username2, $toolserver_password2, 'cyberbot' );
+    $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
     $dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
     $pagebuffer = array();
     $temp = array();
@@ -154,7 +153,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     localscan:
     while( $offset < $linkcount[0]['count'] ) {
         $i = $offset;
-        $dblocal = new Database( 'tools-db', $toolserver_username2, $toolserver_password2, 'cyberbot' );
+        $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
         $result = $dblocal->select( "blacklisted_links", "*", array(), array( 'limit'=>$offset.',5000') );
         if( isset($result['db']) ) {
             unset($result['db']);
@@ -243,7 +242,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         updateData();
         wikiscan:
         while( $offset < $linkcount[0]['count'] ) {
-            $dblocal = new Database( 'tools-db', $toolserver_username2, $toolserver_password2, 'cyberbot' );
+            $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
             $result = $dbwiki->select( "externallinks", "*", array(), array( 'limit'=>$offset.',15000') );
             unset($result['db']);
             unset($result['result']);

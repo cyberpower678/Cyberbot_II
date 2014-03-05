@@ -4,7 +4,6 @@ ini_set('memory_limit','5G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once('/data/project/cyberbot/Peachy/Init.php' );
 require_once('/data/project/cyberbot/database.inc');
-require_once('/data/project/cyberbot/database2.inc');
 
 $site2 = Peachy::newWiki( "meta" );
 $site = Peachy::newWiki( "cyberbotii" );
@@ -53,7 +52,7 @@ updateStatus();
 $starttime = time();
 while( $offset < $linkcount[0]['count'] ) {
 	$dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );	
-    $dblocal = new Database( 'tools-db', $toolserver_username2, $toolserver_password2, 'cyberbot' );
+    $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
 	$result = $dbwiki->select( "externallinks", "*", array(), array( 'limit'=>$offset.',15000') );
 	unset($result['db']);
 	unset($result['result']);
