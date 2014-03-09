@@ -51,7 +51,6 @@ while(true) {
 							}
 					}
 					if( !$istagged ) {
-                        $pagetitle = getFullPageTitle( $pagetitle );
                         $logs = $site->logs( "stable", false, $pagename );
                         if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
                         else $lastprotectaction = 0;
@@ -70,7 +69,6 @@ while(true) {
 					}
 					if( !$istagged ) 
                     {
-                        $pagetitle = getFullPageTitle( $pagetitle );
                         $logs = $site->logs( "stable", false, $pagename );
                         if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
                         else $lastprotectaction = 0;
