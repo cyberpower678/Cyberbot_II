@@ -50,7 +50,14 @@ while(true) {
 									break;
 							}
 					}
-					if( !$istagged ) initPage($page, null, false, true, $timestamp)->prepend($template, "Tagging page with PC1 protection template.", true);
+					if( !$istagged ) {
+                        $pagetitle = getFullPageTitle( $pagetitle );
+                        $logs = $site->logs( "stable", false, $pagename );
+                        if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
+                        else $lastprotectaction = 0;
+                        $dt = time() - $lastprotectaction;
+                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->prepend($template, "Tagging page with PC1 protection template.", true);    
+                    }
 			}    else    {
 					$template = "{{pp-pc2}}\n";
 					echo "Tagging ".$page." with {{pp-pc2}}...\n";
@@ -61,7 +68,15 @@ while(true) {
 									break;
 							}        
 					}
-					if( !$istagged ) initPage($page, null, false, true, $timestamp)->prepend($template, "Tagging page with PC2 protection template.", true);
+					if( !$istagged ) 
+                    {
+                        $pagetitle = getFullPageTitle( $pagetitle );
+                        $logs = $site->logs( "stable", false, $pagename );
+                        if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
+                        else $lastprotectaction = 0;
+                        $dt = time() - $lastprotectaction;
+                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->prepend($template, "Tagging page with PC2 protection template.", true);
+                    }
 			}
 			$i = $i+1;
 	}
