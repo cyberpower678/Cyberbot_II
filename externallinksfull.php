@@ -18,7 +18,6 @@ if( isset( $status['fstatus'] ) && $status['fstatus'] == 'scan' ) {
     $previousoffset = $previousoffset[1];
 }
 
-
 echo "----------RUN TIMESTAMP: ".date('r')."----------\n\n";
 echo "Retrieving blacklists...\n\n";
 
@@ -35,48 +34,56 @@ $whitelistregex = $site->initPage( 'MediaWiki:Spam-whitelist' )->get_text();
 $whitelistregexarray = explode( "\n", $whitelistregex );
 $whitelistregex = buildSafeRegexes($whitelistregexarray);
 
-$dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
+$dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
+$dbwiki = mysqli_connect( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
 
-$linkcount = $dbwiki->select( "externallinks", "COUNT(*) AS count" );
+$res = mysqli_query( $dbwiki, "SELECT COUNT(*) AS count FROM externallinks;" );
+$linkcount = mysqli_fetch_assoc( $res );
+$linkcount = $linkcount['count'];
+mysqli_free_result( $res );
 $offset = 0;
 if( isset( $previousoffset ) ) {
     $offset = $previousoffset;
     unset( $previousoffset );
 }
 $completed = 0;
-$completed = ($offset/$linkcount[0]['count'])*100;
+$completed = ($offset/$linkcount)*100;
 //compile the pages containing blacklisted URLs
-echo "Scanning {$linkcount[0]['count']} externallinks in the database...\n\n";
-$status = array( 'fstatus' => 'scan', 'fbladd'=>$a, 'fscanprogress'=>round($completed, 3)."% ($offset of {$linkcount[0]['count']})" );
+echo "Scanning {$linkcount} externallinks in the database...\n\n";
+$status = array( 'fstatus' => 'scan', 'fbladd'=>$a, 'fscanprogress'=>round($completed, 3)."% ($offset of {$linkcount})" );
 updateStatus();
 $starttime = time();
-while( $offset < $linkcount[0]['count'] ) {
-	$dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );	
-    $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
-	$result = $dbwiki->select( "externallinks", "*", array(), array( 'limit'=>$offset.',15000') );
-	unset($result['db']);
-	unset($result['result']);
-	unset($result['pos']);
-	//print_r( $result );    
-	foreach( $result as $page ) {
-			if( regexscan( $page['el_to'] ) ) {
-					$dblocal->insert( "blacklisted_links", array( 'url'=>$page['el_to'], 'page'=>$page['el_from'] ) );
-					$a++;
-			}
+while( $offset < $linkcount ) {
+	while ( !($res = mysqli_query( $dbwiki, "SELECT * FROM externallinks LIMIT $offset,15000;" )) ) {
+        echo "Reconnecting to enwiki DB...\n\n";
+        mysqli_close( $dbwiki );
+        $dbwiki = mysqli_connect( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );   
+    }    
+	while( $page = mysqli_fetch_assoc( $res ) ) {
+		if( regexscan( $page['el_to'] ) ) {
+			while ( !(mysqli_query( $dblocal, "INSERT INTO blacklisted_links (`url`,`page`) VALUES ('{$page['el_to']}','{$page['el_from']}');" )) && mysqli_errno( $dblocal ) != 1062 ) {
+                echo "Attempted INSERT INTO blacklisted_links (`url`,`page`) VALUES ('{$page['el_to']}','{$page['el_from']}'); with erro ".mysqli_errno( $dblocal )."\n\n";
+                echo "Reconnecting to local DB...\n\n";
+                mysqli_close( $dblocal );
+                $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
+            }
+			$a++;
+		}
 	}
+    mysqli_free_result( $res );
 	$offset+=15000;
-	$completed = ($offset/$linkcount[0]['count'])*100;
+	$completed = ($offset/$linkcount)*100;
 	$completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime);
     $completedby = time() + $completedin;
-	$status = array( 'fstatus' => 'scan', 'fbladd'=>$a, 'fscanprogress'=>round($completed, 3)."% ($offset of {$linkcount[0]['count']})", 'fscaneta'=>round($completedby, 0) );
+	$status = array( 'fstatus' => 'scan', 'fbladd'=>$a, 'fscanprogress'=>round($completed, 3)."% ($offset of {$linkcount})", 'fscaneta'=>round($completedby, 0) );
 	updateStatus();
 }
 $status = array( 'fstatus' => 'idle' );
 updateStatus();
 
 echo "Added $a pages to the local database!\n";
-
-
+mysqli_close( $dblocal );
+mysqli_close( $dbwiki );
   
 //This scans the links with the regexes on the blacklist.  If it finds a match, it scans the whitelist to see if it should be ignored.
 function regexscan( $link ) {

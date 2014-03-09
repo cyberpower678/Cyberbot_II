@@ -55,13 +55,13 @@ if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
     else $globalblacklistregexarray = $rundata['globalblacklistregex'];
     if( !isset( $rundata['whitelistregex'] ) ) goto normalrun;
     else $whitelistregexarray = $rundata['whitelistregex'];
-    $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
-    $dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
+    $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
+    $dbwiki = mysqli_connect( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
 }
 if( isset( $status['status'] ) && $status['status'] == 'scan' && $status['scantype'] == 'local' ) {
     //Attempt to restart scan at crash point
     if( !isset( $rundata['linkcount'] ) ) goto normalrun;
-    else $linkcount[0]['count'] = $rundata['linkcount'];
+    else $linkcount = $rundata['linkcount'];
     if( !isset( $rundata['offset'] ) ) goto normalrun;
     else $offset = $rundata['offset'];
     if( !isset( $rundata['starttime'] ) ) goto normalrun;
@@ -73,7 +73,7 @@ if( isset( $status['status'] ) && $status['status'] == 'scan' && $status['scanty
 if( isset( $status['status'] ) && $status['status'] == 'scan' && $status['scantype'] == 'replica' ) {
     //Attempt to restart scan at crash point
     if( !isset( $rundata['linkcount'] ) ) goto normalrun;
-    else $linkcount[0]['count'] = $rundata['linkcount'];
+    else $linkcount = $rundata['linkcount'];
     if( !isset( $rundata['offset'] ) ) goto normalrun;
     else $offset = $rundata['offset'];
     if( !isset( $rundata['starttime'] ) ) goto normalrun;
@@ -109,8 +109,8 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     $rundata['whitelist'] = $whitelistregex;
     $rundata['whitelistregex'] = $whitelistregexarray;
     
-    $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
-    $dbwiki = new Database( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
+    $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
+    $dbwiki = mysqli_connect( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
     $pagebuffer = array();
     $temp = array();
         
@@ -137,13 +137,16 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/exceptions.wl', serialize($exceptions) );
     updateData();
     
-    $linkcount = $dblocal->select( "blacklisted_links", "COUNT(*) AS count" );
-    $rundata['linkcount'] = $linkcount[0]['count'];
+    $res = mysqli_query( $dblocal, "SELECT COUNT(*) AS count FROM blacklisted_links;" );
+    $linkcount = mysqli_fetch_assoc( $res );
+    $linkcount = $linkcount['count'];
+    mysqli_free_result( $res );
+    $rundata['linkcount'] = $linkcount;
     $offset = 0;
     $rundata['offset'] = $offset;
     //compile the pages containing blacklisted URLs
-    echo "Scanning {$linkcount[0]['count']} previously blacklisted links in the database...\n\n";
-    $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"0% (0 of {$linkcount[0]['count']})", 'scantype'=>'local' );
+    echo "Scanning {$linkcount} previously blacklisted links in the database...\n\n";
+    $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"0% (0 of {$linkcount})", 'scantype'=>'local' );
     updateStatus();
     $starttime = time();
     $rundata['starttime'] = $starttime;
@@ -151,16 +154,14 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     $rundata['todelete'] = $todelete;
     updateData();
     localscan:
-    while( $offset < $linkcount[0]['count'] ) {
+    while( $offset < $linkcount ) {
         $i = $offset;
-        $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
-        $result = $dblocal->select( "blacklisted_links", "*", array(), array( 'limit'=>$offset.',5000') );
-        if( isset($result['db']) ) {
-            unset($result['db']);
-            unset($result['result']);
-            unset($result['pos']);
+        while ( !($res = mysqli_query( $dblocal, "SELECT * FROM blacklisted_links LIMIT $offset,5000;" )) ) {
+            echo "Reconnect to local DB...\n";
+            mysqli_close( $dblocal );
+            $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
         }
-        foreach( $result as $link ) {
+        while( $link = mysqli_fetch_assoc( $res ) ) {
             if( regexscan( $link['url'] ) ) {
                 if( !isset( $pagebuffer[$link['page']]['object'] ) ) $pagebuffer[$link['page']]['object'] = $site->initPage( null, $link['page']);
                 if( !isset( $pagebuffer[$link['page']]['title'] ) ) $pagebuffer[$link['page']]['title'] = $pagebuffer[$link['page']]['object']->get_title();                                                        
@@ -178,19 +179,20 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
                 $d++;
             }
             $i++;
-            $completed = ($i/$linkcount[0]['count'])*100;
+            $completed = ($i/$linkcount)*100;
             $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime);
             $completedby = time() + $completedin;
-            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($i of {$linkcount[0]['count']})", 'scantype'=>'local', 'scaneta'=>round($completedby, 0) );
+            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($i of {$linkcount})", 'scantype'=>'local', 'scaneta'=>round($completedby, 0) );
             updateStatus();
         }
+        mysqli_free_result( $res );
         $offset += 5000;
         $rundata['offset'] = $offset;
         $rundata['todelete'] = $todelete;
         updateData();
     }
     foreach( $todelete as $item ) {
-        $dblocal->delete( "blacklisted_links", array( 'url'=>$item['url'], 'page'=>$item['id'] ) );
+        mysqli_query( $dblocal, "DELETE FROM blacklisted_links WHERE `url`='{$item['url']}' AND `page`='{$item['id']}';");
     }
     unset( $todelete );
     unset( $rundata['todelete'] );
@@ -228,27 +230,29 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         unset( $blacklistregexarray3 );
         $rundata['blacklist'] = $blacklistregex;
 
-        $linkcount = $dbwiki->select( "externallinks", "COUNT(*) AS count" );
-        $rundata['linkcount'] = $linkcount[0]['count'];
+        $res = mysqli_query( $dbwiki, "SELECT COUNT(*) AS count FROM externallinks;" );
+        $linkcount = mysqli_fetch_assoc( $res );
+        $linkcount = $linkcount['count'];
+        mysqli_free_result( $res );
+        $rundata['linkcount'] = $linkcount;
         $offset = 0;
         $rundata['offset'] = $offset;
-        $completed = ($offset/$linkcount[0]['count'])*100;
+        $completed = ($offset/$linkcount)*100;
         //compile the pages containing blacklisted URLs
-        echo "Scanning {$linkcount[0]['count']} externallinks in the database...\n\n";
-        $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($offset of {$linkcount[0]['count']})", 'scantype'=>'replica' );
+        echo "Scanning {$linkcount} externallinks in the database...\n\n";
+        $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($offset of {$linkcount})", 'scantype'=>'replica' );
         updateStatus();
         $starttime = time();
         $rundata['starttime'] = $starttime;
         updateData();
         wikiscan:
-        while( $offset < $linkcount[0]['count'] ) {
-            $dblocal = new Database( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
-            $result = $dbwiki->select( "externallinks", "*", array(), array( 'limit'=>$offset.',15000') );
-            unset($result['db']);
-            unset($result['result']);
-            unset($result['pos']);
-            //print_r( $result );    
-            foreach( $result as $page ) {
+        while( $offset < $linkcount ) {
+            while ( !($res = mysqli_query( $dbwiki, "SELECT * FROM externallinks LIMIT $offset,15000;" )) ) {
+                echo "Reconnecting to enwiki DB...\n";
+                mysqli_close( $dbwiki );
+                $dbwiki = mysqli_connect( 'p:enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );   
+            }
+            while( $page = mysqli_fetch_assoc( $res ) ) {
                 if( regexscan( $page['el_to'] ) ) {
                     if( !isset( $pagebuffer[$page['el_from']] ) ) $pagebuffer[$page['el_from']]['title'] = $site->initPage( null, $page['el_from'])->get_title();
                     if( !exceptionCheck( $pagebuffer[$page['el_from']]['title'], $page['el_to'] ) ) {
@@ -257,16 +261,22 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
                         $pagebuffer[$page['el_from']]['urls'][] = $page['el_to'];
                         }
                     } else $e++;
-                    $dblocal->insert( "blacklisted_links", array( 'url'=>$page['el_to'], 'page'=>$page['el_from'] ) );
+                    while ( !(mysqli_query( $dblocal, "INSERT INTO blacklisted_links (`url`,`page`) VALUES ('{$page['el_to']}','{$page['el_from']}');" )) && mysqli_errno( $dblocal ) != 1062 ) {
+                        echo "Attempted INSERT INTO blacklisted_links (`url`,`page`) VALUES ('{$page['el_to']}','{$page['el_from']}'); with erro ".mysqli_errno( $dblocal )."\n\n";
+                        echo "Reconnecting to local DB...\n";
+                        mysqli_close( $dblocal );
+                        $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
+                    }
                     $a++;
                 }
             }
+            mysqli_free_result( $res );
             $offset+=15000;
             $rundata['offset'] = $offset;
-            $completed = ($offset/$linkcount[0]['count'])*100;
+            $completed = ($offset/$linkcount)*100;
             $completedin = 2*((((time() - $starttime)*100)/$completed)-(time() - $starttime));
             $completedby = time() + $completedin;
-            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($offset of {$linkcount[0]['count']})", 'scantype'=>'replica', 'scaneta'=>round($completedby, 0) );
+            $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>round($completed, 3)."% ($offset of {$linkcount})", 'scantype'=>'replica', 'scaneta'=>round($completedby, 0) );
             updateStatus();
             updateData();
         }
@@ -275,6 +285,8 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     unset( $rundata['offset'] );
     unset( $rundata['linkcount'] );
     unset( $rundata['starttime'] );
+    mysqli_close( $dbwiki );
+    mysqli_close( $dblocal );
     
     findrule:
     $globalblacklistregexarray = explode( "\n", $site2->initPage( 'Spam blacklist' )->get_text() );                                                                     
