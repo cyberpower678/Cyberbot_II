@@ -61,8 +61,8 @@ while( $offset < $linkcount ) {
     }    
 	while( $page = mysqli_fetch_assoc( $res ) ) {
 		if( regexscan( $page['el_to'] ) ) {
-			while ( !(mysqli_query( $dblocal, "INSERT INTO blacklisted_links (`url`,`page`) VALUES ('{$page['el_to']}','{$page['el_from']}');" )) && mysqli_errno( $dblocal ) != 1062 ) {
-                echo "Attempted INSERT INTO blacklisted_links (`url`,`page`) VALUES ('{$page['el_to']}','{$page['el_from']}'); with erro ".mysqli_errno( $dblocal )."\n\n";
+			while ( !(mysqli_query( $dblocal, "INSERT INTO blacklisted_links (`url`,`page`) VALUES ('".mysqli_escape_string($dblocal, $page['el_to'])."','".mysqli_escape_string($dblocal, $page['el_from'])."');" )) && mysqli_errno( $dblocal ) != 1062 ) {
+                echo "Attempted INSERT INTO blacklisted_links (`url`,`page`) VALUES ('".mysqli_escape_string($dblocal, $page['el_to'])."','".mysqli_escape_string($dblocal, $page['el_from'])."'); with error ".mysqli_errno( $dblocal )."\n\n";
                 echo "Reconnecting to local DB...\n\n";
                 mysqli_close( $dblocal );
                 $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
