@@ -192,7 +192,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         updateData();
     }
     foreach( $todelete as $item ) {
-        mysqli_query( $dblocal, "DELETE FROM blacklisted_links WHERE `url`='".mysqli_escape_string($dblocal, $item['url'])."','".mysqli_escape_string($dblocal, $item['id'])."';");
+        if( !mysqli_query( $dblocal, "DELETE FROM blacklisted_links WHERE `url`='".mysqli_escape_string($dblocal, $item['url'])."'AND `page`='".mysqli_escape_string($dblocal, $item['id'])."';") ) echo "ATTEMPTED: DELETE FROM blacklisted_links WHERE `url`='".mysqli_escape_string($dblocal, $item['url'])."' AND `page`='".mysqli_escape_string($dblocal, $item['id'])."';\nERROR: ".mysqli_error( $dblocal )."\n";
     }
     unset( $todelete );
     unset( $rundata['todelete'] );

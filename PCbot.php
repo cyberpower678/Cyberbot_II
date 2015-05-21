@@ -16,7 +16,7 @@ while(true) {
 
 	$timestamp = date( 'Y-m-d\TH:i:s\Z' );
 
-	if( !preg_match( '/\<\!--( )?Served by (.*?) in (.*?) secs.( )?--\>/i', $request ) ) {
+	if( !preg_match( '/mw\.config\.set\(\{\"wgBackendResponseTime\"\:(.*?)\,\"wgHostname\"\:\"(.*?)\"\}\)\;/i', $request ) ) {
 		echo( "Site failure" );
 		exit(1);
 	}
@@ -55,7 +55,7 @@ while(true) {
                         if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
                         else $lastprotectaction = 0;
                         $dt = time() - $lastprotectaction;
-                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->prepend($template, "Tagging page with PC1 protection template.", true);    
+                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->append($template, "Tagging page with PC1 protection template.", true);    
                     }
 			}    else    {
 					$template = "{{pp-pc2}}\n";
@@ -73,7 +73,7 @@ while(true) {
                         if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
                         else $lastprotectaction = 0;
                         $dt = time() - $lastprotectaction;
-                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->prepend($template, "Tagging page with PC2 protection template.", true);
+                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->append($template, "Tagging page with PC2 protection template.", true);
                     }
 			}
 			$i = $i+1;
