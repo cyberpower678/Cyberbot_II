@@ -161,7 +161,10 @@ while( true ) {
                                     $link['newdata']['link_template']['parameters']['dead-url'] = "yes";
                                 }
                             }    
-                        }    
+                        } elseif( $link[$link['link_type']]['tagged_dead'] === true && $link[$link['link_type']]['is_dead'] == false ) {
+                            $rescued++;
+                            $link['newdata']['tagged_dead'] = false;
+                        }   
                     }
                 }
                 if( isset( $link['newdata'] ) && newIsNew( $link ) ) {
