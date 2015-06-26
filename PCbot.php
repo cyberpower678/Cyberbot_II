@@ -12,7 +12,7 @@ $site->set_runpage( "User:Cyberbot II/Run/PC" );
 
 while(true) {
 	echo "----------RUN TIMESTAMP: ".date('r')."----------\n\n";
-	$request = $site->get_http()->get( 'http://en.wikipedia.org/w/index.php?title=Special:StablePages&offset=&limit=500000000' );
+	$request = $site->get_http()->get( 'https://en.wikipedia.org/w/index.php?title=Special:StablePages&offset=&limit=500000000' );
 
 	$timestamp = date( 'Y-m-d\TH:i:s\Z' );
 
@@ -27,57 +27,44 @@ while(true) {
 	echo "Retrieving Protected Pages...\n";
 
 	preg_match_all('/'.
-							'\<li\>\<a href=(.*?) title=(.*?)\>(.*?)\<\/a\>(.*?)\[autoreview=(.*?)\]/i',$request,$list);
+							'\<li\>\<a href=\".*?\"\s*title=\".*?\"\>(.*?)\<\/a\>.*?\[autoreview=(autoconfirmed|review)\]\<i\>(\s*\(expires\s*(.*?\s*\(UTC\))\))?\<\/i\>\<\/li\>/i',$request,$list);
 
-	$names = $list[3];
-	$level = $list[5];
+	$names = $list[1];
+	$level = $list[2];
+    $expiry = $list[4];
 
 	echo "Retrieved protected pages.\n";
 
-	$i = 0;
-
 	//Tag each page with a protection template
-	foreach( $names as $page )    {
-			echo "Processing ".$page."...\n";
-			$istagged = false;
-			if( $level[$i] == "autoconfirmed" )    {
-					$template = "{{pp-pc1}}\n";
-					echo "Tagging ".$page." with {{pp-pc1}}...\n";
-					foreach( $templatelist1 as $page2 )    {
-							if( $page == htmlspecialchars($page2) )    {
-									echo "Page already tagged with {{pp-pc1}}!\n";
-									$istagged = true;
-									break;
-							}
-					}
-					if( !$istagged ) {
-                        $logs = $site->logs( "stable", false, $pagename );
-                        if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
-                        else $lastprotectaction = 0;
-                        $dt = time() - $lastprotectaction;
-                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->append($template, "Tagging page with PC1 protection template.", true);    
-                    }
-			}    else    {
-					$template = "{{pp-pc2}}\n";
-					echo "Tagging ".$page." with {{pp-pc2}}...\n";
-					foreach( $templatelist2 as $page2 )    {
-							if( $page == htmlspecialchars ($page2) )    {
-									echo "Page already tagged with {{pp-pc2}}!\n";
-									$istagged = true;
-									break;
-							}        
-					}
-					if( !$istagged ) 
-                    {
-                        $logs = $site->logs( "stable", false, $pagename );
-                        if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
-                        else $lastprotectaction = 0;
-                        $dt = time() - $lastprotectaction;
-                        if( $dt > 300 ) $site->initPage($page, null, false, true, $timestamp)->append($template, "Tagging page with PC2 protection template.", true);
-                    }
-			}
-			$i = $i+1;
-	}
+	foreach( $names as $i=>$page )    {
+		echo "Processing ".$page."...\nLevel: {$level[$i]}; Expires: {$expiry[$i]}\n";
+        $object = $site->initPage( $page, null, false, true, $timestamp );
+        $text = $object->get_text();
+        $template = "";
+        if( $level[$i] == "autoconfirmed" ) $template .= "{{pp-pc1";
+        else $template .= "{{pp-pc2";
+        if( ($temp = strpos( strtolower( $text ), "{{pp-pc" )) !== false ) {
+            if( strpos( strtolower( $text ), "{{pp-pc", $temp + 1 ) !== false || ( $level[$i] == "autoconfirmed" && strpos( strtolower( $text ), "{{pp-pc2" ) !== false ) || ( $level[$i] == "review" && strpos( strtolower( $text ), "{{pp-pc1" ) !== false ) ) {
+                echo "Replacing existing PC tags with correct one...\n";
+                $text = preg_replace( '/\{\{[P|p]p-pc[1|2].*?\}\}(\s*?\n)?/i','',$text );    
+            } elseif( strpos( strtolower( $text ), $template ) !== false ) {
+                echo "Page already tagged with $template}}\n";
+                continue;
+            }
+        }
+        if( !empty( $expiry[$i] ) ) $template .= "|expiry=".date( 'F j, Y', strtotime( $expiry[$i] ) );
+        $template .= "}}";
+        
+        $logs = $site->logs( "stable", false, $page );
+        if( isset( $logs[0]['timestamp'] ) ) $lastprotectaction = strtotime( $logs[0]['timestamp'] );
+        else $lastprotectaction = 0;
+        $dt = time() - $lastprotectaction;
+        if( $dt <= 300 ) continue;
+        
+        echo "Tagging ".$page." with $template...\n";            
+        if( strtolower( substr( $text, 0, 9 ) ) != "#redirect" ) $object->edit( $template."\n".$text, "Tagging page with $template.", true );            
+	    else $object->edit( $text."\n".$template, "Tagging redirect with $template.", true ); 
+    }
 
 	//Removing templates from unprotected pages
 
@@ -87,39 +74,40 @@ while(true) {
 		$i = 0;
 		$isprotected = false;
 			foreach($names as $page2)    {
-					if(htmlspecialchars ($page) == $page2)    {
-							if($level[$i] == "autoconfirmed")    {
-									echo $page." has a correct tag\n";
-									$isprotected = true;
-							}
+				if(htmlspecialchars ($page) == $page2)    {
+					if($level[$i] == "autoconfirmed")    {
+						echo $page." has a correct tag\n";
+						$isprotected = true;
 					}
-					$i = $i+1;
+				}
+				$i = $i+1;
 			}
 			if($isprotected == false)    {
-					echo $page." is not PC1 protected.  Removing template...\n";
-					$data = initPage($page, null, false, true, $timestamp);
-					$data->edit(preg_replace('/\{\{(P|p)?p-pc1(.*?)\}\}(\n)?/i','',$data->get_text()),"Removing {{Pp-pc1}}.  Page is not protected.", true);
+				echo $page." is not PC1 protected.  Removing template...\n";
+				$data = initPage($page, null, false, true, $timestamp);
+				$data->edit(preg_replace('/\{\{(P|p)?p-pc1(.*?)\}\}(\n)?/i','',$data->get_text()),"Removing {{Pp-pc1}}.  Page is not protected.", true);
 			}
 		}
 
 	foreach($templatelist2 as $page)    {
-			$i = 0;
-			$isprotected = false;
-			foreach($names as $page2)    {
-					if(htmlspecialchars ($page) == $page2)    {
-							if($level[$i] == "review")    {
-									echo $page." has a correct tag\n";
-									$isprotected = true;
-							}
-					}
-					$i = $i+1;
+	    $i = 0;
+		$isprotected = false;
+		foreach($names as $page2)    {
+			if(htmlspecialchars ($page) == $page2)    {
+				if($level[$i] == "review")    {
+					echo $page." has a correct tag\n";
+					$isprotected = true;
+				}
 			}
-			if($isprotected == false)    {
-					echo $page." is not PC2 protected.  Removing template...\n";
-					$data = initPage($page, null, false, true, $timestamp);
-					$data->edit(preg_replace('/\{\{(P|p)?p-pc2(.*?)\}\}(\n)?/i','',$data->get_text()),"Removing {{Pp-pc2}}.  Page is not protected.", true);
-			}
+			$i = $i+1;
+		}
+		if($isprotected == false)    {
+			echo $page." is not PC2 protected.  Removing template...\n";
+			$data = initPage($page, null, false, true, $timestamp);
+			$data->edit(preg_replace('/\{\{(P|p)?p-pc2(.*?)\}\}(\n)?/i','',$data->get_text()),"Removing {{Pp-pc2}}.  Page is not protected.", true);
+		}
 	}
 
 	echo "Task completed!\n\n";
+    sleep( 60 );
 }
