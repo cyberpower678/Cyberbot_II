@@ -6,13 +6,15 @@ This software uses the MW API
 This software uses the Wayback CDX Server API and the Pagination API (not the standard)
 */
 
-ini_set('memory_limit','5G');
+ini_set('memory_limit','1G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once( '/data/project/cyberbot/Peachy/Init.php' );
 
 $site = Peachy::newWiki( "cyberbotii" );
 $site->set_runpage( "User:Cyberbot II/Run/Dead-links" );
+$site->set_taskname( "InternetArchiveBot" );
 
+$debug = false;
 $pgDisplayPechoNormal = false;
 $pgVerbose = array( 2,3,4 );
 $LINK_SCAN = 0;
@@ -90,14 +92,17 @@ while( true ) {
     //Get started with the run
     do {
         $iteration++;
-        if( $PAGE_SCAN == 0 ) {
+        if( $debug === true ) {
+            echo "Fetching test pages...\n";
+            $pages = array( array( 'title'=>"Überlingen mid-air collision", 'pageid'=>null ) );   
+        } elseif( $PAGE_SCAN == 0 ) {
             echo "Fetching article pages...\n";
-            $tArray = array( '_code' => "ap", 'apnamespace' => 0, '_limit' => 1500000, 'list' => "allpages" );
+            $tArray = array( '_code' => "ap", 'apnamespace' => 0, '_limit' => 500000, 'list' => "allpages" );
             $pages = $site->listHandler( $tArray, $return );
             echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n";
         } elseif( $PAGE_SCAN == 1 ) {
             echo "Fetching articles with links marked as dead...\n";
-            $tArray = array( '_code' => "ti", 'tinamespace' => 0, '_limit' => 1500000, 'prop' => "transcludedin", '_lhtitle' => "transcludedin", 'titles' => str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ) );
+            $tArray = array( '_code' => "ti", 'tinamespace' => 0, '_limit' => 500000, 'prop' => "transcludedin", '_lhtitle' => "transcludedin", 'titles' => str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ) );
             $pages = $site->listHandler( $tArray );
             echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n"; 
         }
@@ -119,7 +124,7 @@ while( true ) {
             //Process the links
             foreach( $links as $link ) {
                 if( isset( $link[$link['link_type']]['ignore'] ) && $link[$link['link_type']]['ignore'] === true ) continue;
-                if( $link[$link['link_type']]['is_dead'] === false && $ARCHIVE_ALIVE == 1 && !isArchived( $link[$link['link_type']]['url'] ) ) {
+                if( ( $link[$link['link_type']]['is_dead'] !== true && $link[$link['link_type']]['tagged_dead'] !== true ) && $ARCHIVE_ALIVE == 1 && !isArchived( $link[$link['link_type']]['url'] ) ) {
                     requestArchive( $link[$link['link_type']]['url'] );
                     $archived++;
                 }
@@ -136,21 +141,28 @@ while( true ) {
                                     $link['newdata']['archive_type'] = "template";
                                     $link['newdata']['tagged_dead'] = false;
                                     $link['newdata']['archive_template']['name'] = "wayback";
+                                    if( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) unset( $link[$link['link_type']]['archive_template']['parameters'] );
                                     $link['newdata']['archive_template']['parameters']['url'] = $link[$link['link_type']]['url'];
                                     $link['newdata']['archive_template']['parameters']['date'] = date( 'YmdHis', $temp['archive_time'] );
                                 } elseif( $link[$link['link_type']]['link_type'] == "template" ) {
                                     $link['newdata']['archive_type'] = "parameter";
-                                    $link['newdata']['tagged_dead'] = true;
+                                    if( $link[$link['link_type']]['tagged_dead'] === true || $link[$link['link_type']]['is_dead'] === true ) $link['newdata']['tagged_dead'] = true;
+                                    else $link['newdata']['tagged_dead'] = false;
                                     $link['newdata']['tag_type'] = "parameter";
-                                    $link['newdata']['link_template']['parameters']['dead-url'] = "yes";
+                                    if( $link[$link['link_type']]['tagged_dead'] === true || $link[$link['link_type']]['is_dead'] === true ) $link['newdata']['link_template']['parameters']['dead-url'] = "yes";
+                                    else $link['newdata']['link_template']['parameters']['dead-url'] = "no";
                                     $link['newdata']['link_template']['parameters']['archive-url'] = $temp['archive_url'];
                                     $link['newdata']['link_template']['parameters']['archive-date'] = date( 'j F Y', $temp['archive_time'] );
+                                    if( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) {
+                                        $link['newdata']['link_template']['parameters']['url'] = $link[$link['link_type']]['url'];
+                                    }
                                 }
                                 unset( $temp );
                             } else {
+                                if( $link[$link['link_type']]['tagged_dead'] !== true ) $link['newdata']['tagged_dead'] = true;
+                                else continue;
                                 $tagged++;
                                 $linksTagged++;
-                                $link['newdata']['tagged_dead'] = true;
                                 if( $link[$link['link_type']]['link_type'] == "link" ) {
                                     $link['newdata']['tag_type'] = "template";
                                     $link['newdata']['tag_template']['name'] = "dead link";
@@ -177,18 +189,20 @@ while( true ) {
                 $pagesModified++;
                 $page->edit( $newtext, "Rescuing $rescued sources, flagging $tagged as dead, and archiving $archived sources." );
                 if( $NOTIFY_ON_TALK == 1 ) {
-                    $talk = $site->initPage( null, $page->get_talkID() );
+                    $talk = $site->initPage( "Talk:{$tpage['title']}" );
                     $header = str_replace( "{namespacepage}", $tpage['title'], str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, $TALK_MESSAGE_HEADER ) ) ) );
-                    $body = str_replace( "{namespacepage}", $tpage['title'], str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, str_replace( "\\n", "\n", $TALK_MESSAGE ) ) ) ) );
+                    $body = str_replace( "{namespacepage}", $tpage['title'], str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, str_replace( "\\n", "\n", $TALK_MESSAGE ) ) ) )."~~~~" );
                     $talk->newsection( $body, $header, "Notification of altered sources needing review" );
                 }
             }
+            if( $pagesModified == 250 ) break;
         }
         unset( $pages );
     } while( !empty( $return ) ); 
     $runend = time();
     $runtime = $runend-$runstart;
-    generateLogReport();                                             
+    generateLogReport(); 
+    die( "Trial complete!" );                                            
 }
 
 //Create run log information
@@ -201,7 +215,7 @@ function generateLogReport() {
     $entry .= "||";
     $entry .= date( 'H:i, j F Y (\U\T\C)', $runend );
     $entry .= "||";
-    $entry .= date( 'z:H:i:s', $runend );
+    $entry .= date( 'z:H:i:s', $runend-$runstart );
     $entry .= "||";
     $entry .= $pagesAnalyzed;
     $entry .= "||";
@@ -258,7 +272,7 @@ function generateString( $link ) {
     }
     if( $mArray['has_archive'] === true ) {
         if( $mArray['archive_type'] == "template" ) {
-            $out .= "{{".$mArray['archive_template']['name'];
+            $out .= " {{".$mArray['archive_template']['name'];
             foreach( $mArray['archive_template']['parameters'] as $parameter => $value ) $out .= "|$parameter=$value ";
             $out .= "}}";  
         }
@@ -304,7 +318,7 @@ function getReferences( &$page ) {
     global $DEADLINK_TAGS, $linksAnalyzed, $ARCHIVE_TAGS, $IGNORE_TAGS;
     $tArray = array_merge( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS );
     $returnArray = array();
-    preg_match_all( '/<ref(.*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\})?(?<\/ref>)?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?}})?/i', $page->get_text( true ), $params );
+    preg_match_all( '/<ref([^\/]*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\})?<\/ref>(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?}})?/i', $page->get_text( true ), $params );
     foreach( $params[0] as $tid=>$fullmatch ) {
         $linksAnalyzed++;
         if( !isset( $returnArray[$tid] ) ) {
@@ -328,7 +342,7 @@ function getExternalLinks( &$page ) {
     global $DEADLINK_TAGS, $linksAnalyzed, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS;
     $tArray = array_merge( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS );
     $returnArray = array();
-    preg_match_all( '/(<ref(.*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\})?<\/ref>(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?}})?|\[{1}((?:https?:)?\/\/.*?)\s?.*?\]{1}.*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*\}\})?|(('.str_replace( "\}\}", "", implode( '|', $CITATION_TAGS ) ).').*?\}\}).*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\})?)/i', $page->get_text( true ), $params );
+    preg_match_all( '/(<ref([^\/]*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\})?<\/ref>(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?}})?|\[{1}((?:https?:)?\/\/.*?)\s?.*?\]{1}.*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*\}\})?|(('.str_replace( "\}\}", "", implode( '|', $CITATION_TAGS ) ).').*?\}\}).*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\})?)/i', $page->get_text( true ), $params );
     foreach( $params[0] as $tid=>$fullmatch ) {
         $linksAnalyzed++;
         if( !empty( $params[2][$tid] ) || !empty( $params[2][$tid] ) || !empty( $params[3][$tid] ) ) {
@@ -538,8 +552,8 @@ function getLinkDetails( $linkString, $remainder ) {
         $returnArray['link_template']['string'] = $params[0];
         if( isset( $returnArray['link_template']['parameters']['url'] ) ) $returnArray['url'] = $returnArray['link_template']['parameters']['url'];
         else return array( 'ignore' => true );
-        if( isset( $returnArray['link_template']['parameters']['accessdate'] ) ) $returnArray['access_time'] = strtotime( $returnArray['link_template']['parameters']['accessdate'] );
-        elseif( isset( $returnArray['link_template']['parameters']['access-date'] ) ) $returnArray['access_time'] = strtotime( $returnArray['link_template']['parameters']['access-date'] );
+        if( isset( $returnArray['link_template']['parameters']['accessdate']) && !empty( $returnArray['link_template']['parameters']['accessdate'] ) ) $returnArray['access_time'] = strtotime( $returnArray['link_template']['parameters']['accessdate'] );
+        elseif( isset( $returnArray['link_template']['parameters']['access-date'] ) && !empty( $returnArray['link_template']['parameters']['access-date'] ) ) $returnArray['access_time'] = strtotime( $returnArray['link_template']['parameters']['access-date'] );
         else $returnArray['access_time'] = "x";
         if( isset( $returnArray['link_template']['parameters']['archiveurl'] ) ) $returnArray['archive_url'] = $returnArray['link_template']['parameters']['archiveurl'];  
         if( isset( $returnArray['link_template']['parameters']['archive-url'] ) ) $returnArray['archive_url'] = $returnArray['link_template']['parameters']['archive-url'];
@@ -554,7 +568,7 @@ function getLinkDetails( $linkString, $remainder ) {
             $returnArray['tagged_dead'] = true;
             $returnArray['tag_type'] = "parameter";
         }
-    } elseif( preg_match( '/((?:https?:)?\/\/.*?)\s/i', $linkString, $params ) ) {
+    } elseif( preg_match( '/((?:https?:)?\/\/.*?)(\s|\])/i', $linkString, $params ) ) {
         $returnArray['url'] = $params[1];
         $returnArray['link_type'] = "link"; 
         $returnArray['access_time'] = "x";
