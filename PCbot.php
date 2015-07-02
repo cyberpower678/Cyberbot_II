@@ -40,6 +40,7 @@ while(true) {
 		echo "Processing ".$page."...\nLevel: {$level[$i]}; Expires: {$expiry[$i]}\n";
         $object = $site->initPage( $page, null, false, true, $timestamp );
         $text = $object->get_text();
+        if( empty( $text ) ) continue;
         $template = "";
         if( $level[$i] == "autoconfirmed" ) $template .= "{{pp-pc1";
         else $template .= "{{pp-pc2";
