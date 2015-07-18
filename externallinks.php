@@ -1,33 +1,36 @@
 <?php
 
 ini_set('memory_limit','5G');
+$peachy = '/data/project/cyberbot/Peachy/Init.php';
+$databaseInc = '/data/project/cyberbot/database.inc';
+$spambotDataLoc = '/data/project/cyberbot/CyberbotII/spambotdata/';
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
-require_once('/data/project/cyberbot/Peachy/Init.php' );
-require_once('/data/project/cyberbot/database.inc');
+require_once( $peachy );
+require_once( $databaseInc );
 
 $site2 = Peachy::newWiki( "meta" );
 $site = Peachy::newWiki( "cyberbotii" );
 $site->set_runpage( "User:Cyberbot II/Run/SPAM" );
 
 //recovery from a crash or a stop
-$status = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/sbstatus' ) );
+$status = unserialize( file_get_contents( $spambotDataLoc.'sbstatus' ) );
 if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
     //Attempt to recover data state or start over on failure.
-    file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/lastcrash', serialize( time() ) );
+    file_put_contents( $spambotDataLoc.'lastcrash', serialize( time() ) );
     $a = $status['bladd'];
     $d = $status['bldeleted'];
     $e = $status['blexception'];
-    file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/sbstatus', serialize(array( 'status' => 'recover', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>'x', 'scantype'=>'x' )) );
-    if( !file_exists( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer') ) goto normalrun;
+    file_put_contents( $spambotDataLoc.'sbstatus', serialize(array( 'status' => 'recover', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>'x', 'scantype'=>'x' )) );
+    if( !file_exists( $spambotDataLoc.'pagebuffer') ) goto normalrun;
     else {
-        $pagebuffer = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer' ) );
+        $pagebuffer = unserialize( file_get_contents( $spambotDataLoc.'pagebuffer' ) );
         if( !$pagebuffer ) {
             //Attempt retrieving file slice for slice.
             $offset = 0;
             $string = "";
-            $size = filesize( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer' );
+            $size = filesize( $spambotDataLoc.'pagebuffer' );
             while( $offset < $size ) {
-                $string .= file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer', false, null, $offset, 10000 );
+                $string .= file_get_contents( $spambotDataLoc.'pagebuffer', false, null, $offset, 10000 );
                 $offset += 10000;
             }
             unset( $offset, $size );
@@ -39,15 +42,15 @@ if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
         }
     }
     if( !is_array( $pagebuffer ) ) goto normalrun;
-    if( !file_exists( '/data/project/cyberbot/CyberbotII/spambotdata/rundata') ) goto normalrun;
-    else $rundata = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/rundata') );
+    if( !file_exists( $spambotDataLoc.'rundata') ) goto normalrun;
+    else $rundata = unserialize( file_get_contents( $spambotDataLoc.'rundata') );
     if( !is_array( $rundata ) ) goto normalrun;
     if( !isset( $rundata['whitelist'] ) ) goto normalrun;
     else $whitelistregex = $rundata['whitelist'];
     if( !isset( $rundata['blacklist'] ) ) goto normalrun;
     else $blacklistregex = $rundata['blacklist'];
-    if( !file_exists( '/data/project/cyberbot/CyberbotII/spambotdata/exceptions.wl' ) ) goto normalrun;
-    else $exceptions = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/exceptions.wl' ) );
+    if( !file_exists( $spambotDataLoc.'exceptions.wl' ) ) goto normalrun;
+    else $exceptions = unserialize( file_get_contents( $spambotDataLoc.'exceptions.wl' ) );
     if( !$exceptions ) goto normalrun;
     if( !isset( $rundata['blacklistregex'] ) ) goto normalrun;
     else $blacklistregexarray = $rundata['blacklistregex'];
@@ -55,8 +58,8 @@ if( isset( $status['status'] ) && $status['status'] != 'idle' ) {
     else $globalblacklistregexarray = $rundata['globalblacklistregex'];
     if( !isset( $rundata['whitelistregex'] ) ) goto normalrun;
     else $whitelistregexarray = $rundata['whitelistregex'];
-    $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
-    $dbwiki = mysqli_connect( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
+    $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
+    $dbwiki = mysqli_connect( 'p:enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
 }
 if( isset( $status['status'] ) && $status['status'] == 'scan' && $status['scantype'] == 'local' ) {
     //Attempt to restart scan at crash point
@@ -109,13 +112,13 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     $rundata['whitelist'] = $whitelistregex;
     $rundata['whitelistregex'] = $whitelistregexarray;
     
-    $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
-    $dbwiki = mysqli_connect( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
+    $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );
+    $dbwiki = mysqli_connect( 'p:enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );
     $pagebuffer = array();
     $temp = array();
         
     $exceptions = $site->initPage( 'User:Cyberpower678/spam-exception.js' )->get_text();
-    file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/exceptionsraw', $exceptions );
+    file_put_contents( $spambotDataLoc.'exceptionsraw', $exceptions );
     if( $exceptions == null || $exceptions == "" || $exceptions == false ) exit(1);
     if( !is_null($exceptions) ) {
         $exceptions = explode( "\n", $exceptions );
@@ -134,7 +137,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     }
 
     if( !isset( $exceptions[0]['page'] ) && !isset( $exceptions[0]['url'] ) && !isset( $exceptions[0]['ns'] ) ) $exceptions = null;
-    file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/exceptions.wl', serialize($exceptions) );
+    file_put_contents( $spambotDataLoc.'exceptions.wl', serialize($exceptions) );
     updateData();
     
     $res = mysqli_query( $dblocal, "SELECT COUNT(*) AS count FROM blacklisted_links;" );
@@ -157,9 +160,10 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     while( $offset < $linkcount ) {
         $i = $offset;
         while ( !($res = mysqli_query( $dblocal, "SELECT * FROM blacklisted_links LIMIT $offset,5000;" )) ) {
+            echo "ATTEMPTED: SELECT * FROM blacklisted_links LIMIT $offset,5000;\nERROR: ".mysqli_error( $dblocal )."\n";
             echo "Reconnect to local DB...\n";
             mysqli_close( $dblocal );
-            $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
+            $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
         }
         while( $link = mysqli_fetch_assoc( $res ) ) {
             if( regexscan( $link['url'] ) ) {
@@ -192,27 +196,32 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         updateData();
     }
     foreach( $todelete as $item ) {
-        if( !mysqli_query( $dblocal, "DELETE FROM blacklisted_links WHERE `url`='".mysqli_escape_string($dblocal, $item['url'])."'AND `page`='".mysqli_escape_string($dblocal, $item['id'])."';") ) echo "ATTEMPTED: DELETE FROM blacklisted_links WHERE `url`='".mysqli_escape_string($dblocal, $item['url'])."' AND `page`='".mysqli_escape_string($dblocal, $item['id'])."';\nERROR: ".mysqli_error( $dblocal )."\n";
+        while ( !mysqli_query( $dblocal, "DELETE FROM blacklisted_links WHERE `url`='".mysqli_escape_string($dblocal, $item['url'])."'AND `page`='".mysqli_escape_string($dblocal, $item['id'])."';") ) {
+            echo "ATTEMPTED: DELETE FROM blacklisted_links WHERE `url`='".mysqli_escape_string($dblocal, $item['url'])."' AND `page`='".mysqli_escape_string($dblocal, $item['id'])."';\nERROR: ".mysqli_error( $dblocal )."\n";
+            echo "Reconnect to local DB...\n";
+            mysqli_close( $dblocal );
+            $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
+        }
     }
     unset( $todelete );
     unset( $rundata['todelete'] );
     unset( $item );
 
-    if( !file_exists('/data/project/cyberbot/CyberbotII/spambotdata/global.bl') ) file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/global.bl', serialize($globalblacklistregexarray));
+    if( !file_exists($spambotDataLoc.'global.bl') ) file_put_contents($spambotDataLoc.'global.bl', serialize($globalblacklistregexarray));
     else {
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/sblastrun/global.bl', file_get_contents('/data/project/cyberbot/CyberbotII/spambotdata/global.bl'));    
-        $globalblacklistregexarray2 = array_diff($globalblacklistregexarray, unserialize(file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/global.bl' )));
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/global.bl', serialize($globalblacklistregexarray));
+        file_put_contents($spambotDataLoc.'global.bl', file_get_contents($spambotDataLoc.'global.bl'));    
+        $globalblacklistregexarray2 = array_diff($globalblacklistregexarray, unserialize(file_get_contents( $spambotDataLoc.'global.bl' )));
+        file_put_contents($spambotDataLoc.'global.bl', serialize($globalblacklistregexarray));
     }
-    if( !file_exists('/data/project/cyberbot/CyberbotII/spambotdata/local.bl') || !file_exists('/data/project/cyberbot/CyberbotII/spambotdata/local.wl') ) {
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/local.wl', serialize($whitelistregexarray));
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/local.bl', serialize($blacklistregexarray));
+    if( !file_exists($spambotDataLoc.'local.bl') || !file_exists($spambotDataLoc.'local.wl') ) {
+        file_put_contents($spambotDataLoc.'local.wl', serialize($whitelistregexarray));
+        file_put_contents($spambotDataLoc.'local.bl', serialize($blacklistregexarray));
     } else {
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/sblastrun/local.bl', file_get_contents('/data/project/cyberbot/CyberbotII/spambotdata/local.bl'));
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/sblastrun/local.wl', file_get_contents('/data/project/cyberbot/CyberbotII/spambotdata/local.wl'));
-        $blacklistregexarray2 = array_merge(array_diff($blacklistregexarray, unserialize(file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/local.bl' ))), array_diff(unserialize(file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/local.wl' )), $whitelistregexarray));
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/local.wl', serialize($whitelistregexarray));
-        file_put_contents('/data/project/cyberbot/CyberbotII/spambotdata/local.bl', serialize($blacklistregexarray));  
+        file_put_contents($spambotDataLoc.'sblastrun/local.bl', file_get_contents($spambotDataLoc.'local.bl'));
+        file_put_contents($spambotDataLoc.'sblastrun/local.wl', file_get_contents($spambotDataLoc.'local.wl'));
+        $blacklistregexarray2 = array_merge(array_diff($blacklistregexarray, unserialize(file_get_contents( $spambotDataLoc.'local.bl' ))), array_diff(unserialize(file_get_contents( $spambotDataLoc.'local.wl' )), $whitelistregexarray));
+        file_put_contents($spambotDataLoc.'local.wl', serialize($whitelistregexarray));
+        file_put_contents($spambotDataLoc.'local.bl', serialize($blacklistregexarray));  
         if( isset( $globalblacklistregexarray2 ) ) $blacklistregexarray3 = array_merge($blacklistregexarray2, $globalblacklistregexarray2);
     }
     $status = array( 'status' => 'scan', 'bladd'=>$a, 'bldeleted'=>$d, 'scanprogress'=>"Calculating...", 'scantype'=>'replica' );
@@ -230,7 +239,12 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         unset( $blacklistregexarray3 );
         $rundata['blacklist'] = $blacklistregex;
 
-        $res = mysqli_query( $dbwiki, "SELECT COUNT(*) AS count FROM externallinks;" );
+        while ( !($res = mysqli_query( $dbwiki, "SELECT COUNT(*) AS count FROM externallinks;" )) ) {
+            echo "ATTEMPTED: SELECT COUNT(*) AS count FROM externallinks;\nERROR: ".mysqli_error( $dbwiki )."\n";
+            echo "Reconnect to enwiki DB...\n";
+            mysqli_close( $dblocal );
+            $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
+        }
         $linkcount = mysqli_fetch_assoc( $res );
         $linkcount = $linkcount['count'];
         mysqli_free_result( $res );
@@ -248,9 +262,10 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         wikiscan:
         while( $offset < $linkcount ) {
             while ( !($res = mysqli_query( $dbwiki, "SELECT * FROM externallinks LIMIT $offset,15000;" )) ) {
-                echo "Reconnecting to enwiki DB...\n";
+                echo "ATTEMPTED: SELECT * FROM externallinks LIMIT $offset,15000;\nERROR: ".mysqli_error( $dbwiki )."\n";
+                echo "Reconnect to enwiki DB...\n";
                 mysqli_close( $dbwiki );
-                $dbwiki = mysqli_connect( 'enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );   
+                $dbwiki = mysqli_connect( 'p:enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );   
             }
             while( $page = mysqli_fetch_assoc( $res ) ) {
                 if( regexscan( $page['el_to'] ) ) {
@@ -265,7 +280,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
                         echo "Attempted INSERT INTO blacklisted_links (`url`,`page`) VALUES ('".mysqli_escape_string($dblocal, $page['el_to'])."','".mysqli_escape_string($dblocal, $page['el_from'])."'); with error ".mysqli_errno( $dblocal )."\n\n";
                         echo "Reconnecting to local DB...\n";
                         mysqli_close( $dblocal );
-                        $dblocal = mysqli_connect( 'tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
+                        $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
                     }
                     $a++;
                 }
@@ -322,7 +337,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     echo "Deleted $d links from the local database!\n\n";
     echo "Ignored $e links on the blacklist!\n\n";
     
-    file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/blacklistedlinks', print_r($pagebuffer, true) );
+    file_put_contents( $spambotDataLoc.'blacklistedlinks', print_r($pagebuffer, true) );
     //generate tags for each page and tag them.
     updateData();
     tagging:
@@ -462,13 +477,13 @@ function regexscan( $link ) {
 }
 //generate a status file
 function updateStatus() {
-    global $status;
-    return file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/sbstatus', serialize($status) );    
+    global $status, $spambotDataLoc;
+    return file_put_contents( $spambotDataLoc.'sbstatus', serialize($status) );    
 }
 //generate a data file
 function updateData() {
-    global $rundata, $pagebuffer;
-    return ( file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/rundata', serialize($rundata) ) && file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/pagebuffer', serialize( $pagebuffer ) ) );
+    global $rundata, $pagebuffer, $spambotDataLoc;
+    return ( file_put_contents( $spambotDataLoc.'rundata', serialize($rundata) ) && file_put_contents( $spambotDataLoc.'pagebuffer', serialize( $pagebuffer ) ) );
         
 }
 //make sure the page is on the exceptions list
