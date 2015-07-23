@@ -213,3 +213,10 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+
+*.my.cnf
+spambotdata/
+DeadLinkWorkers/
+database.inc
+dlaa
+dlaan
