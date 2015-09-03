@@ -232,18 +232,21 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
     unset( $globalblacklistregex );
     unset( $old );
     unset( $whitelistregexarray );
-    echo count( $blacklistregexarray3 ) . " new regexes found to scan...\n\n";
+    if( isset( $blacklistregexarray3 ) ) echo count( $blacklistregexarray3 ) . " new regexes found to scan...\n\n";
+    else echo "Scanning all regexes...\n\n";
 
-    if( !empty($blacklistregexarray3) ) {
-        $blacklistregex = buildSafeRegexes($blacklistregexarray3);
-        unset( $blacklistregexarray3 );
+    if( !empty($blacklistregexarray3) || !isset($blacklistregexarray3) ) {
+        if( isset( $blacklistregexarray3 ) ) {
+            $blacklistregex = buildSafeRegexes($blacklistregexarray3);
+            unset( $blacklistregexarray3 );
+        }
         $rundata['blacklist'] = $blacklistregex;
 
         while ( !($res = mysqli_query( $dbwiki, "SELECT COUNT(*) AS count FROM externallinks;" )) ) {
             echo "ATTEMPTED: SELECT COUNT(*) AS count FROM externallinks;\nERROR: ".mysqli_error( $dbwiki )."\n";
             echo "Reconnect to enwiki DB...\n";
-            mysqli_close( $dblocal );
-            $dblocal = mysqli_connect( 'p:tools-db', $toolserver_username, $toolserver_password, 's51059__cyberbot' );   
+            mysqli_close( $dbwiki );
+            $dbwiki = mysqli_connect( 'p:enwiki.labsdb', $toolserver_username, $toolserver_password, 'enwiki_p' );   
         }
         $linkcount = mysqli_fetch_assoc( $res );
         $linkcount = $linkcount['count'];
@@ -360,7 +363,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         }
         $out .= "$out2|bot=Cyberbot II|invisible=false}}\n";
         $templates = $pageobject->get_templates();
-        $buffer = $pageobject->get_text();
+        $oldtext = $buffer = $pageobject->get_text();
         if( $buffer == "" || is_null( $buffer ) ) continue;
         if( in_array_recursive( 'Template:Blacklisted-links', $templates) ) {
             preg_match( '/\{\{Blacklisted\-links\|(1\=)?(\n)?((.(\n)?)*?)\|bot\=Cyberbot II(\|invisible=(.*?))?\}\}(\n)?/i', $buffer, $template );
@@ -371,27 +374,28 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             }
             $out = str_replace( trim( "\n".$linkstrings ), trim( $out2 ), $template );
             $buffer = str_replace( $template, $out, $buffer );
-            $success = $pageobject->edit( $buffer, "Updating {{[[Template:Blacklisted-links|Blacklisted-links]]}}.", true );      
+            if( $oldtext != $buffer ) $success = $pageobject->edit( $buffer, "Updating {{[[Template:Blacklisted-links|Blacklisted-links]]}}.", true );      
+            else $success = false;
         } else {
             preg_match( '/^\s*(?:((?:\s*\{\{\s*(?:about|correct title|dablink|distinguish|for|other\s?(?:hurricaneuses|people|persons|places|uses(?:of)?)|redirect(?:-acronym)?|see\s?(?:also|wiktionary)|selfref|the)\d*\s*(\|(?:\{\{[^{}]*\}\}|[^{}])*)?\}\})+(?:\s*\n)?)\s*)?/i', $buffer, $temp );
             $buffer = preg_replace( '/^\s*(?:((?:\s*\{\{\s*(?:about|correct title|dablink|distinguish|for|other\s?(?:hurricaneuses|people|persons|places|uses(?:of)?)|redirect(?:-acronym)?|see\s?(?:also|wiktionary)|selfref|the)\d*\s*(\|(?:\{\{[^{}]*\}\}|[^{}])*)?\}\})+(?:\s*\n)?)\s*)?/i', $temp[0].$out, $buffer );
-            $success = $pageobject->edit( $buffer, "Tagging page with {{[[Template:Blacklisted-links|Blacklisted-links]]}}.  Blacklisted links found." );
+            if( $oldtext != $buffer ) $success = $pageobject->edit( $buffer, "Tagging page with {{[[Template:Blacklisted-links|Blacklisted-links]]}}.  Blacklisted links found." );
+            else $success = false;
         }
         placenotice:
-        if( !is_null( $talkpageobject ) && $success ) {
+        if( !is_null( $talkpageobject ) && $success !== false ) {
             $out2 = "";
             foreach ( $page['urls'] as $l=>$url ) {
                 $out2 .= "\n*<nowiki>$url</nowiki>";
                 $out2 .= "\n*:''Triggered by <code>{$page['rules'][$l]['rule']}</code> on the {$page['rules'][$l]['blacklist']} blacklist''";    
             }
-            if( ( $talkpagedata = $talkpageobject->get_text( false, "Blacklisted Links Found on [[".$pageobject->get_title( true )."]]" ) ) === false ) $talkpagedata = $talkpageobject->get_text( false, "Blacklisted Links Found on the Main Page" );
             $talkout = "Cyberbot II has detected links on [[".$pageobject->get_title( true )."]] which have been added to the blacklist, either globally or locally. Links tend to be blacklisted because they have a history of being spammed or are highly inappropriate for Wikipedia. The addition will be logged at one of these locations: [[MediaWiki_talk:Spam-blacklist/log|local]] or [[m:Spam_blacklist/log|global]]\n";
             $talkout .= "If you believe the specific link should be exempt from the blacklist, you may [[MediaWiki talk:Spam-whitelist|request that it is white-listed]]. Alternatively, you may request that the link is removed from or altered on the blacklist [[MediaWiki talk:Spam-blacklist|locally]] or [[m:Talk:Spam Blacklist|globally]].\n";
             $talkout .= "When requesting whitelisting, be sure to supply the link to be whitelisted and wrap the link in nowiki tags.\n";
             $talkout .= "Please do not remove the tag until the issue is resolved. You may set the invisible parameter to \"true\" whilst requests to white-list are being processed. Should you require any help with this process, please ask at the [[WP:Help desk|help desk]].\n\n";
             $talkout .= "'''Below is a list of links that were found on the main page:'''\n".$out2;
             $talkout .= "\n\nIf you would like me to provide more information on the talk page, contact [[User:Cyberpower678]] and ask him to program me with more info.\n\nFrom your friendly hard working bot.~~~~";
-            if( $talkpagedata === false ) $talkpageobject->newsection( $talkout, "Blacklisted Links Found on [[".$pageobject->get_title( true )."]]", "Notification of blacklisted links on [[".$pageobject->get_title( true )."]]." );
+            $talkpageobject->newsection( $talkout, "Blacklisted Links Found on [[".$pageobject->get_title( true )."]]", "Notification of blacklisted links on [[".$pageobject->get_title( true )."]]." );
         }
         $completed = ($i/$count)*100;
         $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime);
@@ -414,14 +418,15 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
         $talkpageobject = $pageobject->get_talkID();
         if( !is_null( $talkpageobject ) ) $talkpageobject = $site->initPage( null, $talkpageobject );
         if( isset( $pagebuffer[$pageobject->get_id()] ) ) continue;
-        $buffer = $pageobject->get_text();
+        $oldtext = $buffer = $pageobject->get_text();
         if( $buffer == "" || is_null( $buffer ) ) continue;
         $buffer = preg_replace( array( '/\{\{Spam\-links\|(1\=)?(\n)?((.(\n)?)*?)\|bot\=Cyberbot II(\|invisible=(.*?))?\}\}(\n)?/i', '/\{\{Blacklisted\-links\|(1\=)?(\n)?((.(\n)?)*?)\|bot\=Cyberbot II(\|invisible=(.*?))?\}\}(\n)?/i' ), '', $buffer );
-        $success = $pageobject->edit( $buffer, "Removing {{[[Template:Blacklisted-links|Blacklisted-links]]}}.  No blacklisted links were found.", true );
-        if( !is_null( $talkpageobject ) && $success ) {
+        if( $oldtext != $buffer ) $success = $pageobject->edit( $buffer, "Removing {{[[Template:Blacklisted-links|Blacklisted-links]]}}.  No blacklisted links were found.", true );
+        else $success = false;
+        if( !is_null( $talkpageobject ) && $success !== false ) {
             if( ($talkpagedata = $talkpageobject->get_text( false, "Blacklisted Links Found on [[".$pageobject->get_title( true )."]]" ) ) === false ) $talkpagedata = $talkpageobject->get_text( false, "Blacklisted Links Found on the Main Page" );
             if( $talkpagedata !== false ) {
-                $talkout = $talkpagedata."\n\n{{done|Resolved}} This issue has been resolved, and I have therefore removed the tag, if not already done.  No further action is necessary.~~~~";
+                $talkout = $talkpagedata."\n\n{{done|Resolved}} This issue has been resolved, and I have therefore removed the tag.  No further action is necessary.~~~~";
                 $talkpagedata = str_replace( $talkpagedata, $talkout, $talkpageobject->get_text() );
                 $talkpageobject->edit( $talkpagedata, "/* Blacklisted Links Found on [[".$pageobject->get_title( true )."]] */ Resolved." );
             }
