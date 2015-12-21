@@ -220,3 +220,4 @@ DeadLinkWorkers/
 database.inc
 dlaa
 dlaan
+deadlink.config.local.inc.php

@@ -6,19 +6,11 @@ This software uses the MW API
 This software uses the Wayback API
 */
 
-ini_set('memory_limit','1G');
+ini_set('memory_limit','2G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
-require_once( '/data/project/cyberbot/Peachy/Init.php' );
+require_once( 'deadlink.config.inc.php' );
 
-$site = Peachy::newWiki( "cyberbotii" );
-$site->set_runpage( "User:Cyberbot II/Run/Dead-links" );
-$site->set_taskname( "InternetArchiveBot" );
-
-$debug = false;
-$workers = false;
-$workerLimit = 250;
-$threadPath = '/data/project/cyberbot/CyberbotII/DeadLinkWorkers';
-$dlaaLocation = '/data/project/cyberbot/CyberbotII/dlaa';
+botLogon( $username, $password );
 
 if( isset( $argv[1] ) ) $isWorker = true;
 else $isWorker = false;
@@ -36,6 +28,8 @@ $NOTIFY_ON_TALK = 1;
 $NOTIFY_ERROR_ON_TALK = 1;
 $TALK_MESSAGE_HEADER = "Links modified on main page";
 $TALK_MESSAGE = "Please review the links modified on the main page...";
+$TALK_ERROR_MESSAGE = "There were problems archiving a few links on the page.";
+$TALK_ERROR_MESSAGE_HEADER = "Notification of problematic links";
 $DEADLINK_TAGS = array( "{{dead-link}}" );
 $CITATION_TAGS = array( "{{cite web}}" );
 $ARCHIVE_TAGS = array( "{{wayback}}" );
@@ -44,11 +38,8 @@ $DEAD_RULES = array();
 $VERIFY_DEAD = 1;
 $ARCHIVE_ALIVE = 1;
 $alreadyArchived = array();
-if( file_exists( $dlaaLocation ) ) $alreadyArchived = unserialize( file_get_contents( $dlaaLocation ) );
-if( $workers === true && $isWorker === false ) {
-    array_map('unlink', glob("$threadPath/*.working"));
-    array_map('unlink', glob("$threadPath/*.complete"));
-}
+$lastcheck = time();
+if( file_exists( DLAA ) ) $alreadyArchived = unserialize( file_get_contents( DLAA ) );
 
 while( true ) {
     echo "----------RUN TIMESTAMP: ".date('r')."----------\n\n";
@@ -63,15 +54,11 @@ while( true ) {
     $failedToArchive = array();
     $allerrors = array();
     if( isset( $argv[2] ) && !empty( $argv[2] ) ) {
-        $argv[2] = explode( "=", $argv[2], 2 );
-        if( $argv[2][0] == "allpages" ) {
-            $return = array( 'apcontinue'=>$argv[2][1] );
-        } elseif( $argv[2][0] == "transcludedin" ) {
-            $return = array( 'ticontinue'=>$argv[2][1] );
-        }
-    } else $return = array();
+        $return = $argv[2];
+    } else $return = "";
     $iteration = 0;
-    $config = $site->initPage( "User:Cyberbot II/Dead-links" )->get_text( true );
+    //$config = $site->initPage( "User:Cyberbot II/Dead-links" )->get_text( true );
+    $config = getPageText( "User:Cyberbot II/Dead-links" );
     preg_match( '/\n\|LINK_SCAN\s*=\s*(\d+)/i', $config, $param1 );
     if( isset( $param1[1] ) ) $LINK_SCAN = $param1[1];
     preg_match( '/\n\|DEAD_ONLY\s*=\s*(\d+)/i', $config, $param1 );
@@ -92,6 +79,10 @@ while( true ) {
     if( isset( $param1[1] ) ) $TALK_MESSAGE_HEADER = $param1[1];
     preg_match( '/\n\|TALK_MESSAGE\s*=\s*\"(.*?)\"/i', $config, $param1 );
     if( isset( $param1[1] ) ) $TALK_MESSAGE = $param1[1];
+    preg_match( '/\n\|TALK_ERROR_MESSAGE_HEADER\s*=\s*\"(.*?)\"/i', $config, $param1 );
+    if( isset( $param1[1] ) ) $TALK_ERROR_MESSAGE_HEADER = $param1[1];
+    preg_match( '/\n\|TALK_ERROR_MESSAGE\s*=\s*\"(.*?)\"/i', $config, $param1 );
+    if( isset( $param1[1] ) ) $TALK_ERROR_MESSAGE = $param1[1];
     preg_match( '/\n\|DEADLINK_TAGS\s*=\s*\"(.*?)\"/i', $config, $param1 );
     if( isset( $param1[1] ) ) $DEADLINK_TAGS = explode( ';', $param1[1] );
     preg_match( '/\n\|CITATION_TAGS\s*=\s*\"(.*?)\"/i', $config, $param1 );
@@ -116,307 +107,89 @@ while( true ) {
     
     //Get started with the run
     do {
-        if( ( $workers === true && $isWorker === true ) || $workers === false ) {
-            $iteration++;
-            if( $debug === true ) {
-                echo "Fetching test pages...\n";
-                $pages = array( array( 'title'=>"John Stagliano", 'pageid'=>null ) );   
-            } elseif( $PAGE_SCAN == 0 ) {
-                echo "Fetching article pages...\n";
-                $tArray = array( '_code' => "ap", 'apnamespace' => 0, '_limit' => 5000, 'list' => "allpages" );
-                $pages = $site->listHandler( $tArray, $return );
-                echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n";
-            } elseif( $PAGE_SCAN == 1 ) {
-                echo "Fetching articles with links marked as dead...\n";
-                $tArray = array( '_code' => "ti", 'tinamespace' => 0, '_limit' => 5000, 'prop' => "transcludedin", '_lhtitle' => "transcludedin", 'titles' => str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ) );
-                $pages = $site->listHandler( $tArray, $return );
-                echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n"; 
-            }
-            
-            if( $isWorker === true ) {
-                file_put_contents( $threadPath . "/Worker".$workerID . ".working", serialize( $return ) );   
-            }
-            
+        $iteration++;
+        //fetch the pages we want to analyze and edit.  This fetching process is done in batches to preserve memory. 
+        if( $debug === true ) {         //This fetches a specific page for debugging purposes
+            echo "Fetching test pages...\n";
+            $pages = array( $debugPage );   
+        } elseif( $PAGE_SCAN == 0 ) {   //This fetches all the articles, or a batch of them.
+            echo "Fetching article pages...\n";
+            $pages = getAllArticles( 5000, $return );
+            $return = $pages[1];
+            $pages = $pages[0];
+            echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n";
+        } elseif( $PAGE_SCAN == 1 ) {   //This fetches only articles with a deadlink tag in it, or a batch of them
+            echo "Fetching articles with links marked as dead...\n";
+            $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), 5000, $return );
+            $return = $pages[1];
+            $pages = $pages[0];
+            echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n"; 
+        }
+        
+        //Begin page analysis
+        if( WORKERS === false ) {
             foreach( $pages as $tid => $tpage ) {
-                echo "Analyzing {$tpage['title']} ({$tpage['pageid']})...\n";
-                $modifiedLinks = array();
-                $archiveProblems = array();
                 $pagesAnalyzed++;
-                $archived = 0;
-                $rescued = 0;
-                $tagged = 0;
-                $page = $site->initPage( $tpage['title'], $tpage['pageid'], false );
-                $history = $page->history( 10000, "newer", true );
-                $oldtext = $newtext = $page->get_text( true );
-                if( preg_match( '/\{\{((U|u)se)?\s?(D|d)(MY|my)\s?(dates)?/i', $oldtext ) ) $df = true;
-                else $df = false;
-                if( $LINK_SCAN == 0 ) $links = getExternalLinks( $page, $history );
-                else $links = getReferences( $page, $history );
-                                               
-                //Process the links
-                $checkResponse = $archiveResponse = $fetchResponse = $toArchive = $toFetch = array();
-                foreach( $links as $id=>$link ) {
-                    if( isset( $link[$link['link_type']]['ignore'] ) && $link[$link['link_type']]['ignore'] === true ) continue;
-                    $toArchive[$id] = $link[$link['link_type']]['url'];
-                }
-                $checkResponse = isArchived( $toArchive );
-                $toArchive = array();
-                foreach( $links as $id=>$link ) {
-                    if( isset( $link[$link['link_type']]['ignore'] ) && $link[$link['link_type']]['ignore'] === true ) continue;
-                    if( ( $link[$link['link_type']]['is_dead'] !== true && $link[$link['link_type']]['tagged_dead'] !== true ) && $ARCHIVE_ALIVE == 1 && !$checkResponse[$id] ) {
-                        $toArchive[$id] = $link[$link['link_type']]['url']; 
-                    }
-                    if( $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false || ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) ) {
-                        if( $link[$link['link_type']]['link_type'] != "x" ) {
-                            if( ($link[$link['link_type']]['tagged_dead'] === true && ( $TAG_OVERRIDE == 1 || $link[$link['link_type']]['is_dead'] === true ) && ( ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] != "parameter" ) || $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false ) ) || ( $link[$link['link_type']]['is_dead'] === true && $DEAD_ONLY == 2 ) || ( $DEAD_ONLY == 0 ) ) {
-                                $toFetch[$id] = array( $link[$link['link_type']]['url'], ( $ARCHIVE_BY_ACCESSDATE == 1 ? ( $link[$link['link_type']]['access_time'] != "x" ? $link[$link['link_type']]['access_time'] : null ) : null ) );  
-                            }
-                        }
-                    }
-                }
-                $errors = array();
-                if( !empty( $toArchive ) ) $archiveResponse = requestArchive( $toArchive, $errors );
-                if( !empty( $toFetch ) ) $fetchResponse = retrieveArchive( $toFetch ); 
-                foreach( $links as $id=>$link ) {
-                    if( isset( $link[$link['link_type']]['ignore'] ) && $link[$link['link_type']]['ignore'] === true ) continue;
-                    if( ( $link[$link['link_type']]['is_dead'] !== true && $link[$link['link_type']]['tagged_dead'] !== true ) && $ARCHIVE_ALIVE == 1 && !$checkResponse[$id] ) {
-                        if( $archiveResponse[$id] === true ) {
-                            $archived++;  
-                        } elseif( $archiveResponse[$id] === false ) {
-                            $archiveProblems[$id] = $link[$link['link_type']]['url'];
-                            $failedToArchive[] = $link[$link['link_type']]['url'];
-                            $allerrors[] = $errors[$id];
-                        }
-                    }
-                    if( $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false || ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) ) {
-                        if( $link[$link['link_type']]['link_type'] != "x" ) {
-                            if( ($link[$link['link_type']]['tagged_dead'] === true && ( $TAG_OVERRIDE == 1 || $link[$link['link_type']]['is_dead'] === true ) && ( ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] != "parameter" ) || $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false ) ) || ( $link[$link['link_type']]['is_dead'] === true && $DEAD_ONLY == 2 ) || ( $DEAD_ONLY == 0 ) ) {
-                                if( ($temp = $fetchResponse[$id]) !== false ) {
-                                    $rescued++;
-                                    $modifiedLinks[$id]['type'] = "addarchive";
-                                    $modifiedLinks[$id]['link'] = $link[$link['link_type']]['url'];
-                                    $modifiedLinks[$id]['newarchive'] = $temp['archive_url'];
-                                    if( $link[$link['link_type']]['has_archive'] === true ) {
-                                        $modifiedLinks[$id]['type'] = "modifyarchive";
-                                        $modifiedLinks[$id]['oldarchive'] = $link[$link['link_type']]['archive_url'];
-                                    }
-                                    $linksFixed++;
-                                    $link['newdata']['has_archive'] = true;
-                                    $link['newdata']['archive_url'] = $temp['archive_url'];
-                                    $link['newdata']['archive_time'] = $temp['archive_time'];
-                                    if( $link[$link['link_type']]['link_type'] == "link" ) {
-                                        $link['newdata']['archive_type'] = "template";
-                                        $link['newdata']['tagged_dead'] = false;
-                                        $link['newdata']['archive_template']['name'] = "wayback";
-                                        if( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) unset( $link[$link['link_type']]['archive_template']['parameters'] );
-                                        $link['newdata']['archive_template']['parameters']['url'] = $link[$link['link_type']]['url'];
-                                        $link['newdata']['archive_template']['parameters']['date'] = date( 'YmdHis', $temp['archive_time'] );
-                                        if( $df === true ) $link['newdata']['archive_template']['parameters']['df'] = "y";
-                                    } elseif( $link[$link['link_type']]['link_type'] == "template" ) {
-                                        $link['newdata']['archive_type'] = "parameter";
-                                        if( $link[$link['link_type']]['tagged_dead'] === true || $link[$link['link_type']]['is_dead'] === true ) $link['newdata']['tagged_dead'] = true;
-                                        else $link['newdata']['tagged_dead'] = false;
-                                        $link['newdata']['tag_type'] = "parameter";
-                                        if( $link[$link['link_type']]['tagged_dead'] === true || $link[$link['link_type']]['is_dead'] === true ) {
-                                            if( !isset( $link[$link['link_type']]['link_template']['parameters']['dead-url'] ) ) $link['newdata']['link_template']['parameters']['deadurl'] = "yes";
-                                            else $link['newdata']['link_template']['parameters']['dead-url'] = "yes";
-                                        }
-                                        else {
-                                            if( !isset( $link[$link['link_type']]['link_template']['parameters']['dead-url'] ) ) $link['newdata']['link_template']['parameters']['deadurl'] = "no";
-                                            else $link['newdata']['link_template']['parameters']['dead-url'] = "no";
-                                        }
-                                        if( !isset( $link[$link['link_type']]['link_template']['parameters']['archive-url'] ) ) $link['newdata']['link_template']['parameters']['archiveurl'] = $temp['archive_url'];
-                                        else $link['newdata']['link_template']['parameters']['archive-url'] = $temp['archive_url'];
-                                        if( $df === true ) {
-                                            if( !isset( $link[$link['link_type']]['link_template']['parameters']['archive-date'] ) ) $link['newdata']['link_template']['parameters']['archivedate'] = date( 'j F Y', $temp['archive_time'] );
-                                            else $link['newdata']['link_template']['parameters']['archive-date'] = date( 'j F Y', $temp['archive_time'] );
-                                        } else {
-                                            if( !isset( $link[$link['link_type']]['link_template']['parameters']['archive-date'] ) ) $link['newdata']['link_template']['parameters']['archivedate'] = date( 'F j, Y', $temp['archive_time'] );
-                                            else $link['newdata']['link_template']['parameters']['archive-date'] = date( 'F j, Y', $temp['archive_time'] );    
-                                        }
-                                        
-                                        if( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) {
-                                            $link['newdata']['link_template']['parameters']['url'] = $link[$link['link_type']]['url'];
-                                            $modifiedLinks[$id]['type'] = "fix";
-                                        }
-                                    }
-                                    unset( $temp );
-                                } else {
-                                    if( $link[$link['link_type']]['tagged_dead'] !== true ) $link['newdata']['tagged_dead'] = true;
-                                    else continue;
-                                    $tagged++;
-                                    $linksTagged++;
-                                    $modifiedLinks[$id]['type'] = "tagged";
-                                    $modifiedLinks[$id]['link'] = $link[$link['link_type']]['url'];
-                                    if( $link[$link['link_type']]['link_type'] == "link" ) {
-                                        $link['newdata']['tag_type'] = "template";
-                                        $link['newdata']['tag_template']['name'] = "dead link";
-                                        $link['newdata']['tag_template']['parameters']['date'] = date( 'F Y' );
-                                        $link['newdata']['tag_template']['parameters']['bot'] = "Cyberbot II";    
-                                    } elseif( $link[$link['link_type']]['link_type'] == "template" ) {
-                                        $link['newdata']['tag_type'] = "parameter";
-                                        if( !isset( $link[$link['link_type']]['link_template']['parameters']['dead-url'] ) ) $link['newdata']['link_template']['parameters']['deadurl'] = "yes";
-                                        else $link['newdata']['link_template']['parameters']['dead-url'] = "yes";
-                                    }
-                                }    
-                            } elseif( $link[$link['link_type']]['tagged_dead'] === true && $link[$link['link_type']]['is_dead'] == false ) {
-                                $rescued++;
-                                $modifiedLinks[$id]['type'] = "tagremoved";
-                                $modifiedLinks[$id]['link'] = $link[$link['link_type']]['url'];
-                                $link['newdata']['tagged_dead'] = false;
-                            }   
-                        }
-                    }
-                    if( isset( $link['newdata'] ) && newIsNew( $link ) ) {
-                        $link['newstring'] = generateString( $link );
-                        $newtext = str_replace( $link['string'], $link['newstring'], $newtext );
-                    }
-                }
-                echo "Rescued: $rescued; Tagged dead: $tagged; Archived: $archived; Max System Memory Used: ".memory_get_peak_usage(true)."\n\n";
-                if( $isWorker === false ) {
-                    file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
-                }
-                if( !empty( $archiveProblems ) && $NOTIFY_ERROR_ON_TALK == 1 ) {
-                    $talk = $site->initPage( "Talk:{$tpage['title']}" );
-                    $out = "Hello.  During the archive process, the archive returned errors for one or more sites that I submitted for archiving.\n";
-                    $out .= "Below, I have included the links that returned with an error and the following error message.\n\n";
-                    foreach( $archiveProblems as $id=>$problem ) {
-                        $out .= "* $problem with error {$errors[$id]}\n";
-                    } 
-                    $out .= "In any event this will be the only notification in regards to these links, and no further attempt will be made to archive the links.\n\n";
-                    $out .= "Cheers.~~~~";
-                    $talk->newsection( $out, "Trouble archiving links on the article", "Notification of a failed archive attempt." );  
-                }
-                if( $oldtext != $newtext ) {
-                    $pagesModified++;
-                    $revid = $page->edit( $newtext, "Rescuing $rescued sources, flagging $tagged as dead, and archiving $archived sources." );
-                    if( $NOTIFY_ON_TALK == 1 && $revid !== false ) {
-                        $talk = $site->initPage( "Talk:{$tpage['title']}" );
-                        $out = "";
-                        foreach( $modifiedLinks as $link ) {
-                            $out .= "*";
-                            switch( $link['type'] ) {
-                                case "addarchive":
-                                $out .= "Added archive {$link['newarchive']} to ";
-                                break;
-                                case "modifyarchive":
-                                $out .= "Replaced archive link {$link['oldarchive']} with {$link['newarchive']} on ";
-                                break;
-                                case "fix":
-                                $out .= "Attempted to fix sourcing for ";
-                                break;
-                                case "tagged":
-                                $out .= "Added {{tlx|dead link}} tag to ";
-                                break;
-                                case "tagremoved":
-                                $out .= "Removed dead tag from ";
-                                break;
-                                default:
-                                $out .= "Modified source for ";
-                                break;
-                            }
-                            $out .= $link['link'];
-                            $out .= "\n";     
-                        }
-                        $header = str_replace( "{namespacepage}", $tpage['title'], str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, $TALK_MESSAGE_HEADER ) ) ) );
-                        $body = str_replace( "{diff}", "https://en.wikipedia.org/w/index.php?diff=prev&oldid=$revid", str_replace( "{modifiedlinks}", $out, str_replace( "{namespacepage}", $tpage['title'], str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, str_replace( "\\n", "\n", $TALK_MESSAGE ) ) ) ) ) ) )."~~~~";
-                        $talk->newsection( $body, $header, "Notification of altered sources needing review" );
-                    }
-                }
-            }
-            unset( $pages );
-            if( $isWorker === true ) {
-                unlink( $threadPath . "/Worker" . $workerID . ".working" );
-                file_put_contents( $threadPath . "/Worker".$workerID . ".complete", serialize( array( 'pagesmodified'=>$pagesModified, 'pagesanalyzed'=>$pagesAnalyzed, 'linksanalyzed'=>$linksAnalyzed, 'linksfixed'=>$linksFixed, 'linksarchived'=>$linksArchived, 'linkstagged'=>$linksTagged, 'dlaa'=>$alreadyArchived, 'max_memory'=>memory_get_peak_usage( true ), 'new_problem' => $failedToArchive ) ) );   
-                exit(0);
+                $stats = analyzePage( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN );
+                if( $stats['pagemodified'] === true ) $pagesModified++;
+                $linksAnalyzed += $stats['linksanalyzed'];
+                $linksArchived += $stats['linksarchived'];
+                $linksFixed += $stats['linksrescued'];
+                $linksTagged += $stats['linkstagged'];
+                $alreadyArchived = array_merge( $stats['newlyArchived'], $alreadyArchived );
+                $failedToArchive = array_merge( $failedToArchive, $stats['archiveProblems'] );
+                $allerrors = array_merge( $allerrors, $stats['errors'] );
+                file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
             }
         } else {
-            for( $i = 0; $i < $workerLimit; $i++ ) {
-                if( spawn( $i, $return ) ) {
-                    while( !file_exists( $threadPath."\\Worker" . $i . ".working" ) ) sleep(1);
-                    $return = unserialize( file_get_contents( $threadPath."/Worker" . $i . ".working" ) );
-                } else {
-                    echo "Spawn failed!  Continuing...\n\n";
+            //for( $i = 0; $i < count( $pages ); $i += $workerLimit ) {
+                $workerQueue = new Pool( $workerLimit );
+                //$tpages = array_slice( $pages, $i, $workerLimit );
+                foreach( $pages as $tid => $tpage ) {
+                    $pagesAnalyzed++;
+                    echo "Submitted {$tpage['title']}, job ".($tid+1)." for analyzing...\n";
+                    $workerQueue->submit( new ThreadedBot( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN ) );
+                           
                 }
-                if( empty( $return ) ) break; 
-            }
-            while( true ) {
-                $maxMemory = 0;
-                for( $i = 0; $i < $workerLimit; $i++ ) {
-                    if( !file_exists( $threadPath."/Worker" . $i . ".complete" ) ) continue;
-                    else {
-                        $stats = unserialize( file_get_contents( $threadPath."/Worker" . $i . ".working" ) );
-                        $pagesAnalyzed += $stats['pagesanalyzed'];
-                        $pagesModified += $stats['pagesmodified'];
-                        $linksAnalyzed += $stats['linksanalyzed'];
-                        $linksArchived += $stats['linksarchived'];
-                        $linksFixed += $stats['linksfixed'];
-                        $linksTagged += $stats['linkstagged'];
-                        $failedToArchive = array_merge( $failedToArchive, $stats['new_problem'] );
-                        $maxMemory = max( array( $maxMemory, $stats['max_memory'] ) );
-                        $alreadyArchived = array_merge( $alreadyArchived, array_diff( $stats['dlaa'], $alreadyArchived ) );
-                        file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
-                        unlink( $threadPath . "/Worker" . $i . ".complete" );
-                        echo "Worker $i finished!  ";
-                        if( empty( $return ) ) {
-                            echo "Spawning new worker...";
-                            if( spawn( $i, $return ) ) {
-                                while( !file_exists( $threadPath."/Worker" . $i . ".working" ) ) sleep(1);
-                                $return = unserialize( file_get_contents( $threadPath."/Worker" . $i . ".working" ) );
-                            } else {
-                                echo "Spawn failed!  Continuing...\n\n";
-                            }
-                        }
-                        echo "\nStats so far:\n";
-                        echo "Pages Analyzed: $pagesAnalyzed\n";
-                        echo "Pages Edited: $pagesModified\n";
-                        echo "Links Analyzed: $linksAnalyzed\n";
-                        echo "Links Modified: $linksFixed\n";
-                        echo "Links Tagged: $linksTagged\n";
-                        echo "Links Archived: $linksArchived\n";
-                        echo "Failed to Archive: ".count( $failedToArchive );
-                        echo "Max System Memory Used by Worker: $maxMemory\n\n";
-                    }
-                    if( time() - filemtime( "$threadPath/Worker$id.out" ) > 300 && file_exists( $threadPath."/Worker" . $i . ".working" ) ) {
-                        echo "Worker $i stalled!  ";
-                        unlink( $threadPath . "/Worker" . $i . ".worker" );
-                        if( empty( $return ) ) {
-                            echo "Spawning new worker...";
-                            if( spawn( $i, $return ) ) {
-                                while( !file_exists( $threadPath."/Worker" . $i . ".working" ) ) sleep(1);
-                                $return = unserialize( file_get_contents( $threadPath."/Worker" . $i . ".working" ) );
-                            } else {
-                                echo "Spawn failed!  Continueing...\n\n";
-                            }
-                        }
-                        echo "\n\n";
-                    }
-                }
-                $finished = true;
-                for( $i = 0; $i < $workerLimit; $i++ ) {
-                    if( file_exists( $threadPath."/Worker" . $i . ".complete" ) || file_exists( $threadPath."/Worker" . $i . ".working" ) ) $finished = false;      
-                }
-                if( $finished === true ) break;   
-            }
-            echo "All workers have finished!!!\n\n";
+                $workerQueue->shutdown();
+                $workerQueue->collect(
+                function( $thread ) {
+                    global $pagesModified, $linksAnalyzed, $linksArchived, $linksFixed, $linksTagged, $alreadyArchived, $failedToArchive, $allerrors;
+                    $stats = $thread->result;
+                    if( $stats['pagemodified'] === true ) $pagesModified++;
+                    $linksAnalyzed += $stats['linksanalyzed'];
+                    $linksArchived += $stats['linksarchived'];
+                    $linksFixed += $stats['linksrescued'];
+                    $linksTagged += $stats['linkstagged'];
+                    $alreadyArchived = array_merge( $stats['newlyArchived'], $alreadyArchived );
+                    $failedToArchive = array_merge( $failedToArchive, $stats['archiveProblems'] );
+                    $allerrors = array_merge( $allerrors, $stats['errors'] );
+                    return $thread->isGarbage();
+                });
+                echo "!!!!!!!!!!!!!!Links analyzed so far: $linksAnalyzed\n\n";
+                file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
+                //$workerQueue = null;
+                //unset( $workerQueue );
+            //}
         }
+        unset( $pages );
     } while( !empty( $return ) ); 
     $runend = time();
     $runtime = $runend-$runstart;
     echo "Updating list of failed archive attempts...\n\n";
     $out = "";
-    foreach( $failedToArchive as $id=>$link ) $out .= "*$link error {$allerrors[$id]}\n";
-    $site->initPage( "User:Cyberbot II/Links that won't archive" )->append( $out, "Updating list of links that won't archive." );
+    foreach( $failedToArchive as $id=>$link ) $out .= "\n*$link with error '''{$allerrors[$id]}'''";
+    edit( "User:Cyberbot II/Links that won't archive", $out, "Updating list of links that won't archive.", true, false, true, "append" );
     echo "Printing log report, and starting new run...\n\n";
-    generateLogReport();  
+    if( $debug === false ) generateLogReport();  
+    sleep(10);
     exit(0);                                           
 }
 
 //Create run log information
 function generateLogReport() {
-    global $site, $NOTIFY_ON_TALK, $linksAnalyzed, $linksArchived, $linksFixed, $linksTagged, $runstart, $runend, $runtime, $pagesAnalyzed, $pagesModified;
-    $page = $site->initPage( "User:Cyberbot II/Dead-Links Log" );
-    $log = $page->get_text();
+    global $NOTIFY_ON_TALK, $linksAnalyzed, $linksArchived, $linksFixed, $linksTagged, $runstart, $runend, $runtime, $pagesAnalyzed, $pagesModified;
+    $log = getPageText( "User:Cyberbot II/Dead-Links Log" );
     $entry = "|-\n|";
     $entry .= date( 'H:i, j F Y (\U\T\C)', $runstart );
     $entry .= "||";
@@ -437,12 +210,11 @@ function generateLogReport() {
     $entry .= $linksArchived;
     $entry .= "\n";
     $log = str_replace( "|}", $entry."|}", $log );
-    $page->edit( $log, "Updating run log with run statistics" );
+    edit( "User:Cyberbot II/Dead-Links Log", $log, "Updating run log with run statistics" );
     return;
 }
 //Construct string
-function generateString( $link ) {
-    global $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS;
+function generateString( $link, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS ) {
     $out = "";
     $mArray = mergeNewData( $link );
     $tArray = array_merge( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS ); 
@@ -526,18 +298,18 @@ function newIsNew( $link ) {
 }
 
 //Gather and parse all references and return as organized array
-function getReferences( &$page, $history ) {
-    global $DEADLINK_TAGS, $linksAnalyzed, $ARCHIVE_TAGS, $IGNORE_TAGS;
+function getReferences( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ) {
+    $linksAnalyzed = 0;
     $tArray = array_merge( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS );
     $returnArray = array();   
-    $regex = '/<ref([^\/]*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}.*?)?<\/ref>(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?}})?/i';
-    preg_match_all( $regex, preg_replace( '/\<\!\-\-(.|\n)*?\-\-\>/i', "", $page->get_text( true ) ), $params );
+    $regex = '/<ref([^\/]*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}.*?)?<\/ref>(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?\}\})*/i';
+    preg_match_all( $regex, preg_replace( '/\<\!\-\-(.|\n)*?\-\-\>/i', "", $page ), $params );
     foreach( $params[0] as $tid=>$fullmatch ) {
         $linksAnalyzed++;
         if( !isset( $returnArray[$tid] ) ) {
             $returnArray[$tid]['link_type'] = "reference";
             //Fetch parsed reference content
-            $returnArray[$tid]['reference'] = getLinkDetails( $params[2][$tid], $params[3][$tid].$params[5][$tid], $history ); 
+            $returnArray[$tid]['reference'] = getLinkDetails( $params[2][$tid], $params[3][$tid].$params[5][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ); 
             $returnArray[$tid]['string'] = $params[0][$tid];
         }
         //Fetch reference parameters
@@ -547,22 +319,23 @@ function getReferences( &$page, $history ) {
             continue;
         }
     }
+    $returnArray['count'] = $linksAnalyzed;
     return $returnArray;   
 }
 
 //Gather and parse all external links including references
-function getExternalLinks( &$page, $history ) {
-    global $DEADLINK_TAGS, $linksAnalyzed, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS;
+function getExternalLinks( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ) {
+    $linksAnalyzed = 0;
     $tArray = array_merge( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS );
     $returnArray = array();
-    $regex = '/(<ref([^\/]*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}.*?)?<\/ref>(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?\}\}\s*?)*?|\[{1}((?:https?:)?\/\/.*?)\s?.*?\]{1}.*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}\s*?)*?|(('.str_replace( "\}\}", "", implode( '|', $CITATION_TAGS ) ).').*?\}\})\s*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}\s*?)*?)/i';
-    preg_match_all( $regex, preg_replace( '/\<\!\-\-(.|\n)*?\-\-\>/i', "", $page->get_text( true ) ), $params );
+    $regex = '/(<ref([^\/]*?)>(.*?)(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}.*?)?<\/ref>(('.str_replace( "\}\}", "", implode( '|', $tArray ) ).').*?\}\})*|\[{1}((?:https?:)?\/\/.*?)\s?.*?\]{1}.*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}\s*?)*?|(('.str_replace( "\}\}", "", implode( '|', $CITATION_TAGS ) ).').*?\}\})\s*?(('.str_replace( "\}\}", "", implode( '|', $tArray ) ) .').*?\}\}\s*?)*?)/i';
+    preg_match_all( $regex, preg_replace( '/\<\!\-\-(.|\n)*?\-\-\>/i', "", $page ), $params );
     foreach( $params[0] as $tid=>$fullmatch ) {
         $linksAnalyzed++;
         if( !empty( $params[2][$tid] ) || !empty( $params[2][$tid] ) || !empty( $params[3][$tid] ) ) {
             $returnArray[$tid]['link_type'] = "reference";
             //Fetch parsed reference content
-            $returnArray[$tid]['reference'] = getLinkDetails( $params[3][$tid], $params[4][$tid].$params[6][$tid], $history ); 
+            $returnArray[$tid]['reference'] = getLinkDetails( $params[3][$tid], $params[4][$tid].$params[6][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ); 
             $returnArray[$tid]['string'] = $params[0][$tid];
             //Fetch reference parameters
             if( !empty( $params[2][$tid] ) ) $returnArray[$tid]['reference']['parameters'] = getReferenceParameters( $params[2][$tid] );
@@ -573,16 +346,17 @@ function getExternalLinks( &$page, $history ) {
         } elseif( !empty( $params[8][$tid] ) ) {
             $returnArray[$tid]['link_type'] = "externallink";
             //Fetch parsed reference content
-            $returnArray[$tid]['externallink'] = getLinkDetails( $params[0][$tid], $params[9][$tid], $history ); 
+            $returnArray[$tid]['externallink'] = getLinkDetails( $params[0][$tid], $params[9][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ); 
             $returnArray[$tid]['string'] = $params[0][$tid];
         } elseif( !empty( $params[11][$tid] ) || !empty( $params[13][$tid] ) ) {
             $returnArray[$tid]['link_type'] = "template";
             //Fetch parsed reference content
-            $returnArray[$tid]['template'] = getLinkDetails( $params[11][$tid], $params[13][$tid], $history );
+            $returnArray[$tid]['template'] = getLinkDetails( $params[11][$tid], $params[13][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD );
             $returnArray[$tid]['name'] = str_replace( "{{", "", $params[12][$tid] );
             $returnArray[$tid]['string'] = $params[0][$tid];
         }
     }
+    $returnArray['count'] = $linksAnalyzed;
     return $returnArray; 
 }
 
@@ -597,11 +371,10 @@ function getReferenceParameters( $refparamstring ) {
 }
 
 //This is the parsing engine.  It picks apart the string in every detail, so the bot can accurately construct an appropriate reference.
-function getLinkDetails( $linkString, $remainder, $history ) {
-    global $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD;
+function getLinkDetails( $linkString, $remainder, $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ) {
     $returnArray = array();
     $returnArray['link_string'] = $linkString;
-    $returnArray['remainder'] = $remainder;
+    $returnArray['remainder'] = $remainder;              
     if( preg_match( '/('.str_replace( "\}\}", "", implode( '|', $IGNORE_TAGS ) ).')\s*?\|?(.*?(\{\{.*?\}\}.*?)*?)\}\}/i', $remainder, $params ) || preg_match( '/('.str_replace( "\}\}", "", implode( '|', $IGNORE_TAGS ) ).')\s*?\|(.*?(\{\{.*?\}\}.*?)*?)\}\}/i', $linkString, $params ) ) {
         return array( 'ignore' => true );
     }
@@ -630,10 +403,13 @@ function getLinkDetails( $linkString, $remainder, $history ) {
         $returnArray['link_template']['parameters'] = getTemplateParameters( $params[2] );
         $returnArray['link_template']['name'] = str_replace( "{{", "", $params[1] );
         $returnArray['link_template']['string'] = $params[0];
-        preg_match( '/archive\.org\/(web\/)?(\d{14})\/(\S*)/i', $returnArray['link_template']['parameters']['url'], $params2 );
-        $returnArray['archive_time'] = strtotime( $params2[2] );
-        $returnArray['archive_url'] = trim( $params2[0] );
-        $returnArray['url'] = $params2[3];
+        if( preg_match( '/archive\.org\/(web\/)?(\d{14})\/(\S*)/i', $returnArray['link_template']['parameters']['url'], $params2 ) ) {
+            $returnArray['archive_time'] = strtotime( $params2[2] );
+            $returnArray['archive_url'] = trim( $params2[0] );
+            $returnArray['url'] = $params2[3];    
+        } else {
+            return array( 'ignore' => true );
+        }
         $returnArray['tagged_dead'] = true;
         $returnArray['tag_type'] = "implied";
         if( !isset( $returnArray['link_template']['parameters']['accessdate'] ) && !isset( $returnArray['link_template']['parameters']['access-date'] ) ) $returnArray['access_time'] = $returnArray['archive_time'];   
@@ -864,23 +640,41 @@ function getLinkDetails( $linkString, $remainder, $history ) {
 }
 //Look for the time the link was added.
 function getTimeAdded( $url, $history ) {
-    if( !empty( $url ) ) return time();
+    if( empty( $url ) ) return time();
     $time = time();
     foreach( $history as $revision ) {
-        if( strpos( $revision['*'], $url ) !== false ) break;
-        else $time = strtotime( $revision['timestamp'] );   
+        $time = strtotime( $revision['timestamp'] ); 
+        if( !isset( $revision['*'] ) ) continue;
+        if( strpos( $revision['*'], $url ) !== false ) break;  
     }
     return $time;
 }
 
 //Parsing engine of templates.  This parses the body string of a template, respecting embedded templates and wikilinks.
 function getTemplateParameters( $templateString ) {
-    $templateString = trim( $templateString );
     $returnArray = array();
     $tArray = array();
     while( true ) {
-        $pipepos = strpos( $templateString, "|" );
-        while( ( strpos( $templateString, "{{" ) < $pipepos && strpos( $templateString, "}}" ) > $pipepos ) || ( strpos( $templateString, "[[" ) < $pipepos && strpos( $templateString, "]]" ) > $pipepos ) ) $pipepos = strpos( $templateString, "|", $pipepos + 1 );
+        $offset = 0;        
+        $loopcount = 0;
+        $pipepos = strpos( $templateString, "|", $offset);
+        $tstart = strpos( $templateString, "{{", $offset );   
+        $tend = strpos( $templateString, "}}", $offset );
+        $lstart = strpos( $templateString, "[[", $offset );
+        $lend = strpos( $templateString, "]]", $offset );
+        while( true ) {
+            $loopcount++;
+            if( $lend !== false && $tend !== false ) $offset = min( array( $tend, $lend ) ) + 1;
+            elseif( $lend === false ) $offset = $tend + 1;
+            else $offset = $lend + 1;     
+            while( ( $tstart < $pipepos && $tend > $pipepos ) || ( $lstart < $pipepos && $lend > $pipepos ) ) $pipepos = strpos( $templateString, "|", $pipepos + 1 );
+            $tstart = strpos( $templateString, "{{", $offset );   
+            $tend = strpos( $templateString, "}}", $offset );
+            $lstart = strpos( $templateString, "[[", $offset );
+            $lend = strpos( $templateString, "]]", $offset );
+            if( ( $pipepos < $tstart || $tstart === false ) && ( $pipepos < $lstart || $lstart === false ) ) break;
+            if( $loopcount >= 500 ) return false;
+        }
         if( $pipepos !== false ) {  
             $tArray[] = substr( $templateString, 0, $pipepos  );
             $templateString = substr_replace( $templateString, "", 0, $pipepos + 1 );
@@ -901,11 +695,11 @@ function getTemplateParameters( $templateString ) {
 
 //Verify if link is a dead-link
 function isLinkDead( &$referenceArray ) {
-    global $site;
+    return false;
     $referenceArray['is_dead'] = false;
     if( isset( $referenceArray['url'] ) ) {
-        $page = $site->get_http()->get( $referenceArray['url'] );
-        $code = $site->get_http()->get_HTTP_code();
+        //$page = $site->get_http()->get( $referenceArray['url'] );
+        //$code = $site->get_http()->get_HTTP_code();
         if( $code != 200 ) $referenceArray['is_dead'] = true;    
     } else {
         $referenceArray['is_dead'] = false;
@@ -913,13 +707,13 @@ function isLinkDead( &$referenceArray ) {
     return $referenceArray['is_dead'];     
 }
 
-//Submit an archive request
-function requestArchive( $urls, &$errors = array() ) {
-    global $site, $linksArchived, $alreadyArchived;
-    $getURLs = $returnArray = array();
+//Submit archive requests (multithread version available too)
+function requestArchive( $urls, $alreadyArchived ) {
+    $getURLs = array();
+    $returnArray = array( 'result'=>array(), 'errors'=>array(), 'newlyArchived'=>array() );
     foreach( $urls as $id=>$url ) {
         if( in_array( $url, $alreadyArchived ) ) {
-            $returnArray[$id] = null;
+            $returnArray['result'][$id] = null;
             continue;
         }
         $getURLs[$id] = array( 'url' => "http://web.archive.org/save/$url", 'type' => "get" ); 
@@ -927,92 +721,72 @@ function requestArchive( $urls, &$errors = array() ) {
     if( !empty( $getURLs ) ) $res = multiquery( $getURLs );
     foreach( $res['headers'] as $id=>$item ) {
         if( isset( $item['X-Archive-Wayback-Liveweb-Error'] ) ) {
-            $errors[$id] = $item['X-Archive-Wayback-Liveweb-Error'];
-            $returnArray[$id] = false;
-            $alreadyArchived[] = $url;
-        } else $returnArray[$id] = true;
+            $returnArray['errors'][$id] = $item['X-Archive-Wayback-Liveweb-Error'];
+            $returnArray['result'][$id] = false;
+            $returnArray['newlyArchived'][] = $urls[$id];
+        } else $returnArray['result'][$id] = true;
     }
     return $returnArray;
 }
 
-//Checks if an archive is available
-function isArchived( $urls, &$errors = array() ) {
-    global $site, $alreadyArchived;
-    $getURLs = $returnArray = array();
+//Checks availability of archives
+function isArchived( $urls, $alreadyArchived ) {
+    $getURLs = array();
+    $returnArray = array( 'result'=>array(), 'errors'=>array() );
     foreach( $urls as $id=>$url ) {
         if( in_array( $url, $alreadyArchived ) ) {
-            $returnArray[$id] = true;
+            $returnArray['result'][$id] = true;
             continue;
         }
         $url = urlencode( $url );
-        $getURLs[$id] = array( 'url'=>"http://web.archive.org/cdx/search/cdx?url=$url&output=json&limit=-2&matchType=exact&filter=statuscode:(200|203|206|301|302|307|308)", 'type'=>"get" );
+        $getURLs[$id] = array( 'url'=>"http://web.archive.org/cdx/search/cdx?url=$url&output=json&limit=-2&matchType=exact&filter=statuscode:(200|203|206)", 'type'=>"get" );
     }
     $res = multiquery( $getURLs );
     foreach( $res['results'] as $id=>$data ) {
         $data = json_decode( $data, true );
-        $returnArray[$id] = !empty( $data );
-        if( isset( $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'] ) ) $errors[$id] = $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'];
+        $returnArray['result'][$id] = !empty( $data );
+        if( isset( $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'] ) ) $returnArray['errors'][$id] = $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'];
     }
     return $returnArray;
 }
 
-//Fetches an archive
-function retrieveArchive( $data, &$errors = array() ) {
-    global $site;
-    $returnArray = array();
+//Fetches archives
+function retrieveArchive( $data ) {
+    $returnArray = array( 'result'=>array(), 'errors'=>array() );
     foreach( $data as $id=>$item ) {
         $url = $item[0];
         $time = $item[1];
         $url = urlencode( $url ); 
-        $getURLs[$id] = array( 'url'=>"http://web.archive.org/cdx/search/cdx?url=$url".( !is_null( $time ) ? "&to=".date( 'YmdHis', $time ) : "" )."&output=json&limit=-2&matchType=exact&filter=statuscode:(200|203|206|301|302|307|308)", 'type'=>"get" );
+        $getURLs[$id] = array( 'url'=>"http://web.archive.org/cdx/search/cdx?url=$url".( !is_null( $time ) ? "&to=".date( 'YmdHis', $time ) : "" )."&output=json&limit=-2&matchType=exact&filter=statuscode:(200|203|206)", 'type'=>"get" );
     }
     $res = multiquery( $getURLs );
     $getURLs = array();
-    foreach( $res['results'] as $id=>$data ) {
-        $data = json_decode( $data, true );
-        if( isset( $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'] ) ) $errors[$id] = $res['headers'][$id]['X-Archive-Wayback-Runtime-Error']; 
-        if( !empty($data) ) {
-            $returnArray[$id]['archive_url'] = "https://web.archive.org/".$data[count($data)-1][1]."/".$data[count($data)-1][2];
-            $returnArray[$id]['archive_time'] = strtotime( $data[count($data)-1][1] );    
+    foreach( $res['results'] as $id=>$data2 ) {
+        $data2 = json_decode( $data2, true );
+        if( isset( $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'] ) ) $returnArray['errors'][$id] = $res['headers'][$id]['X-Archive-Wayback-Runtime-Error']; 
+        if( !empty($data2) ) {
+            $returnArray['result'][$id]['archive_url'] = "https://web.archive.org/".$data2[count($data2)-1][1]."/".$data2[count($data2)-1][2];
+            $returnArray['result'][$id]['archive_time'] = strtotime( $data2[count($data2)-1][1] );    
         } else {
-            $getURLs[$id] = array( 'url'=>"http://web.archive.org/cdx/search/cdx?url=$url".( !is_null( $time ) ? "&from=".date( 'YmdHis', $time ) : "" )."&output=json&limit=2&matchType=exact&filter=statuscode:(200|203|206|301|302|307|308)", 'type'=>"get" );  
+            $url = $data[$id][0];
+            $time = $data[$id][1];
+            $getURLs[$id] = array( 'url'=>"http://web.archive.org/cdx/search/cdx?url=$url".( !is_null( $time ) ? "&from=".date( 'YmdHis', $time ) : "" )."&output=json&limit=2&matchType=exact&filter=statuscode:(200|203|206)", 'type'=>"get" );  
         }
     }
     if( !empty( $getURLs ) ) {
         $res = multiquery( $getURLs );
         foreach( $res['results'] as $id=>$data ) {
             $data = json_decode( $data, true );
-            if( isset( $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'] ) ) $errors[$id] = $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'];
+            if( isset( $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'] ) ) $returnArray['errors'][$id] = $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'];
             if( !empty($data) ) {
-                $returnArray[$id]['archive_url'] = "https://web.archive.org/".$data[1][1]."/".$data[1][2];
-                $returnArray[$id]['archive_time'] = strtotime( $data[1][1] );    
+                $returnArray['result'][$id]['archive_url'] = "https://web.archive.org/".$data[1][1]."/".$data[1][2];
+                $returnArray['result'][$id]['archive_time'] = strtotime( $data[1][1] );    
             } else {
-                $returnArray[$id] = false;
+                $returnArray['result'][$id] = false;
             }
         }
     } 
     return $returnArray;
-}
-
-//Spawns a subprocess of itself
-function spawn($id, $startCode = "" ) { 
-    global $threadPath;
-    if( isset( $startCode['apcontinue'] ) ) $startCode = "allpages=".$startCode['apcontinue'];
-    elseif( isset( $startCode['ticontinue'] ) ) $startCode = "transcludedin=".$startCode['ticontinue'];
-    else $startCode = "";
-    if (substr(php_uname(), 0, 7) == "Windows"){ 
-        echo "Spawning worker $id...";
-        $command = "START \"Worker$id\" /B \"" . dirname( php_ini_loaded_file() ) . "\\php\" \"" . __FILE__ . "\" $id \"" . $startCode ."\" > \"$threadPath/Worker$id.out\""; 
-        pclose(popen($command, "w"));
-        echo "Spawned!\n\n";
-        return true;
-    } 
-    else { 
-        echo "Spawning worker $id...";
-        popen(pclose("php \"" . __FILE__ . "\" $id \"" . $startCode ."\" > \"$threadPath/Worker$id.out\" &"));  
-        echo "Spawned!\n\n";
-        return true; 
-    } 
 }
 
 //Perform multiple queries simultaneously
@@ -1024,14 +798,12 @@ function multiquery( $data ) {
     $curl_instances = array();
     $returnArray = array( 'headers' => array(), 'results' => array(), 'errors' => array() );
     foreach( $data as $id=>$item ) {
-        if( !isset( $item['url'] ) || empty( $item['url'] ) ) throw new RuntimeException( 'Invalid cURL parameter specified on index '.$id.'.  (URL)' );
         $curl_instances[$id] = curl_init();
         if( $curl_instances[$id] === false ) {
             return false;
         }
 
-        $userAgent = 'Source Rescuing Bot for en.wikipedia.org (Cyberbot II operated by Cyberpower678)';
-        curl_setopt( $curl_instances[$id], CURLOPT_USERAGENT, $userAgent );
+        curl_setopt( $curl_instances[$id], CURLOPT_USERAGENT, USERAGENT );
         curl_setopt( $curl_instances[$id], CURLOPT_MAXCONNECTS, 100 );
         curl_setopt( $curl_instances[$id], CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
         curl_setopt( $curl_instances[$id], CURLOPT_MAXREDIRS, 10 );
@@ -1041,7 +813,6 @@ function multiquery( $data ) {
         curl_setopt( $curl_instances[$id], CURLOPT_TIMEOUT, 100 );
         curl_setopt( $curl_instances[$id], CURLOPT_CONNECTTIMEOUT, 10 );
         if( $item['type'] == "post" ) {
-            if( !isset( $item['data'] ) || empty( $item['data'] ) ) throw new RuntimeException( 'Invalid cURL parameter specified on index '.$id.'.  (DATA)' );
             curl_setopt( $curl_instances[$id], CURLOPT_FOLLOWLOCATION, 0 );
             curl_setopt( $curl_instances[$id], CURLOPT_HTTPGET, 0 );
             curl_setopt( $curl_instances[$id], CURLOPT_POST, 1 );
@@ -1080,21 +851,674 @@ function multiquery( $data ) {
             $header_size = curl_getinfo( $curl_instances[$id], CURLINFO_HEADER_SIZE );
             $returnArray['headers'][$id] = http_parse_headers( substr( $returnArray['results'][$id], 0, $header_size ) );
             $returnArray['results'][$id] = trim( substr( $returnArray['results'][$id], $header_size ) );
-        } 
+        }
+        curl_close( $curl_instances[$id] ); 
         curl_multi_remove_handle( $multicurl_resource, $curl_instances[$id] );
     }
     curl_multi_close( $multicurl_resource );
-    foreach( $curl_instances as $id=>$instance ) {
-        curl_close( $curl_instances[$id] );  
-    }
     return $returnArray;
 }
 
 function http_parse_headers( $header ) {
     $header = preg_replace( '/http\/\d\.\d\s\d{3}.*?\n/i', "", $header );
     $header = explode( "\n", $header );
+    $returnArray = array();
     foreach( $header as $id=>$item) $header[$id] = explode( ":", $item, 2 );
     foreach( $header as $id=>$item) if( count( $item ) == 2 ) $returnArray[trim($item[0])] = trim($item[1]);
     return $returnArray;
+}
+
+function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN ) {
+    if( WORKERS === false ) echo "Analyzing {$page} ({$pageid})...\n";
+    $modifiedLinks = array();
+    $archiveProblems = array();
+    $archived = 0;
+    $rescued = 0;
+    $tagged = 0;
+    $analyzed = 0;
+    $newlyArchived = array();
+    $timestamp = date( "Y-m-d\TH:i:s\Z" );
+    $history = getPageHistory( $page, 10000 );  
+    $oldtext = $newtext = getPageText( $page );
+    //Step further into the program until the memory starts to accumulate.
+    $oldtext = $newtext = $history = null;
+    unset( $oldtext, $newtext, $history );
+    return false;
+    if( preg_match( '/\{\{((U|u)se)?\s?(D|d)(MY|my)\s?(dates)?/i', $oldtext ) ) $df = true;
+    else $df = false;
+    if( $LINK_SCAN == 0 ) $links = getExternalLinks( $oldtext, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD );
+    else $links = getReferences( $oldtext, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD );
+    $analyzed = $links['count'];
+    unset( $links['count'] );
+                                   
+    //Process the links
+    $checkResponse = $archiveResponse = $fetchResponse = $toArchive = $toFetch = array();
+    foreach( $links as $id=>$link ) {
+        if( isset( $link[$link['link_type']]['ignore'] ) && $link[$link['link_type']]['ignore'] === true ) continue;
+        if( ( $link[$link['link_type']]['is_dead'] !== true && $link[$link['link_type']]['tagged_dead'] !== true ) && $ARCHIVE_ALIVE == 1 ) $toArchive[$id] = $link[$link['link_type']]['url'];
+    }
+    $checkResponse = isArchived( $toArchive, $alreadyArchived );
+    $checkResponse = $checkResponse['result'];
+    $toArchive = array();
+    foreach( $links as $id=>$link ) {
+        if( isset( $link[$link['link_type']]['ignore'] ) && $link[$link['link_type']]['ignore'] === true ) continue;
+        if( ( $link[$link['link_type']]['is_dead'] !== true && $link[$link['link_type']]['tagged_dead'] !== true ) && $ARCHIVE_ALIVE == 1 && !$checkResponse[$id] ) {
+            $toArchive[$id] = $link[$link['link_type']]['url']; 
+        }
+        if( $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false || ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) ) {
+            if( $link[$link['link_type']]['link_type'] != "x" ) {
+                if( ($link[$link['link_type']]['tagged_dead'] === true && ( $TAG_OVERRIDE == 1 || $link[$link['link_type']]['is_dead'] === true ) && ( ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] != "parameter" ) || $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false ) ) || ( $link[$link['link_type']]['is_dead'] === true && $DEAD_ONLY == 2 ) || ( $DEAD_ONLY == 0 ) ) {
+                    $toFetch[$id] = array( $link[$link['link_type']]['url'], ( $ARCHIVE_BY_ACCESSDATE == 1 ? ( $link[$link['link_type']]['access_time'] != "x" ? $link[$link['link_type']]['access_time'] : null ) : null ) );  
+                }
+            }
+        }
+    }
+    $errors = array();
+    if( MULTITHREAD === true ) {
+        if( !empty( $toArchive ) ) if( ($archiveResponse = AsyncFunctionCall::call( "requestArchive", array( $toArchive, $alreadyArchived ) )) === false ) {
+            echo "Threaded function call, requestArchive, failed, running non-threaded function call...\n";
+        }
+        if( !empty( $toFetch ) ) if( ($fetchResponse = AsyncFunctionCall::call( "retrieveArchive", array( $toFetch ) )) === false ) {
+            echo "Threaded function call, retrieveArchive, failed, running non-threaded function call...\n";
+        }
+        if( !empty( $toArchive ) && $archiveResponse !== false ) {
+            $archiveResponse->join();
+            $archiveResponse = $archiveResponse->result;
+            $errors = $archiveResponse['errors'];
+            $newlyArchived = $archiveResponse['newlyArchived'];
+            $archiveResponse = $archiveResponse['result'];
+        } elseif( $archiveResponse === false ) {
+            $archiveResponse = requestArchive( $toArchive, $alreadyArchived );
+            $errors = $archiveResponse['errors'];
+            $newlyArchived = $archiveResponse['newlyArchived'];
+            $archiveResponse['result'];
+        }
+        if( !empty( $toFetch ) && $fetchResponse !== false ) {
+            $fetchResponse->join();
+            $fetchResponse = $fetchResponse->result; 
+            $fetchResponse = $fetchResponse['result'];
+        } elseif( $fetchResponse === false ) {
+            $fetchResponse = retrieveArchive( $toFetch );
+            $fetchResponse['result'];
+        }                
+    } else {
+        if( !empty( $toArchive ) ) {
+            $archiveResponse = requestArchive( $toArchive, $alreadyArchived );
+            $errors = $archiveResponse['errors'];
+            $newlyArchived = $archiveResponse['newlyArchived'];
+            $archiveResponse = $archiveResponse['result'];
+        }
+        if( !empty( $toFetch ) ) {
+            $fetchResponse = retrieveArchive( $toFetch );
+            $fetchResponse = $fetchResponse['result'];
+        } 
+    }
+    foreach( $links as $id=>$link ) {
+        if( isset( $link[$link['link_type']]['ignore'] ) && $link[$link['link_type']]['ignore'] === true ) continue;
+        if( ( $link[$link['link_type']]['is_dead'] !== true && $link[$link['link_type']]['tagged_dead'] !== true ) && $ARCHIVE_ALIVE == 1 && !$checkResponse[$id] ) {
+            if( $archiveResponse[$id] === true ) {
+                $archived++;  
+            } elseif( $archiveResponse[$id] === false ) {
+                $archiveProblems[$id] = $link[$link['link_type']]['url'];
+                $failedToArchive[] = $link[$link['link_type']]['url'];
+                $allerrors[] = $errors[$id];
+            }
+        }
+        if( $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false || ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) ) {
+            if( $link[$link['link_type']]['link_type'] != "x" ) {
+                if( ($link[$link['link_type']]['tagged_dead'] === true && ( $TAG_OVERRIDE == 1 || $link[$link['link_type']]['is_dead'] === true ) && ( ( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] != "parameter" ) || $TOUCH_ARCHIVE == 1 || $link[$link['link_type']]['has_archive'] === false ) ) || ( $link[$link['link_type']]['is_dead'] === true && $DEAD_ONLY == 2 ) || ( $DEAD_ONLY == 0 ) ) {
+                    if( ($temp = $fetchResponse[$id]) !== false ) {
+                        $rescued++;
+                        $modifiedLinks[$id]['type'] = "addarchive";
+                        $modifiedLinks[$id]['link'] = $link[$link['link_type']]['url'];
+                        $modifiedLinks[$id]['newarchive'] = $temp['archive_url'];
+                        if( $link[$link['link_type']]['has_archive'] === true ) {
+                            $modifiedLinks[$id]['type'] = "modifyarchive";
+                            $modifiedLinks[$id]['oldarchive'] = $link[$link['link_type']]['archive_url'];
+                        }
+                        $link['newdata']['has_archive'] = true;
+                        $link['newdata']['archive_url'] = $temp['archive_url'];
+                        $link['newdata']['archive_time'] = $temp['archive_time'];
+                        if( $link[$link['link_type']]['link_type'] == "link" ) {
+                            $link['newdata']['archive_type'] = "template";
+                            $link['newdata']['tagged_dead'] = false;
+                            $link['newdata']['archive_template']['name'] = "wayback";
+                            if( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) unset( $link[$link['link_type']]['archive_template']['parameters'] );
+                            $link['newdata']['archive_template']['parameters']['url'] = $link[$link['link_type']]['url'];
+                            $link['newdata']['archive_template']['parameters']['date'] = date( 'YmdHis', $temp['archive_time'] );
+                            if( $df === true ) $link['newdata']['archive_template']['parameters']['df'] = "y";
+                        } elseif( $link[$link['link_type']]['link_type'] == "template" ) {
+                            $link['newdata']['archive_type'] = "parameter";
+                            if( $link[$link['link_type']]['tagged_dead'] === true || $link[$link['link_type']]['is_dead'] === true ) $link['newdata']['tagged_dead'] = true;
+                            else $link['newdata']['tagged_dead'] = false;
+                            $link['newdata']['tag_type'] = "parameter";
+                            if( $link[$link['link_type']]['tagged_dead'] === true || $link[$link['link_type']]['is_dead'] === true ) {
+                                if( !isset( $link[$link['link_type']]['link_template']['parameters']['dead-url'] ) ) $link['newdata']['link_template']['parameters']['deadurl'] = "yes";
+                                else $link['newdata']['link_template']['parameters']['dead-url'] = "yes";
+                            }
+                            else {
+                                if( !isset( $link[$link['link_type']]['link_template']['parameters']['dead-url'] ) ) $link['newdata']['link_template']['parameters']['deadurl'] = "no";
+                                else $link['newdata']['link_template']['parameters']['dead-url'] = "no";
+                            }
+                            if( !isset( $link[$link['link_type']]['link_template']['parameters']['archive-url'] ) ) $link['newdata']['link_template']['parameters']['archiveurl'] = $temp['archive_url'];
+                            else $link['newdata']['link_template']['parameters']['archive-url'] = $temp['archive_url'];
+                            if( $df === true ) {
+                                if( !isset( $link[$link['link_type']]['link_template']['parameters']['archive-date'] ) ) $link['newdata']['link_template']['parameters']['archivedate'] = date( 'j F Y', $temp['archive_time'] );
+                                else $link['newdata']['link_template']['parameters']['archive-date'] = date( 'j F Y', $temp['archive_time'] );
+                            } else {
+                                if( !isset( $link[$link['link_type']]['link_template']['parameters']['archive-date'] ) ) $link['newdata']['link_template']['parameters']['archivedate'] = date( 'F j, Y', $temp['archive_time'] );
+                                else $link['newdata']['link_template']['parameters']['archive-date'] = date( 'F j, Y', $temp['archive_time'] );    
+                            }
+                            
+                            if( $link[$link['link_type']]['has_archive'] === true && $link[$link['link_type']]['archive_type'] == "invalid" ) {
+                                $link['newdata']['link_template']['parameters']['url'] = $link[$link['link_type']]['url'];
+                                $modifiedLinks[$id]['type'] = "fix";
+                            }
+                        }
+                        unset( $temp );
+                    } else {
+                        if( $link[$link['link_type']]['tagged_dead'] !== true ) $link['newdata']['tagged_dead'] = true;
+                        else continue;
+                        $tagged++;
+                        $modifiedLinks[$id]['type'] = "tagged";
+                        $modifiedLinks[$id]['link'] = $link[$link['link_type']]['url'];
+                        if( $link[$link['link_type']]['link_type'] == "link" ) {
+                            $link['newdata']['tag_type'] = "template";
+                            $link['newdata']['tag_template']['name'] = "dead link";
+                            $link['newdata']['tag_template']['parameters']['date'] = date( 'F Y' );
+                            $link['newdata']['tag_template']['parameters']['bot'] = "Cyberbot II";    
+                        } elseif( $link[$link['link_type']]['link_type'] == "template" ) {
+                            $link['newdata']['tag_type'] = "parameter";
+                            if( !isset( $link[$link['link_type']]['link_template']['parameters']['dead-url'] ) ) $link['newdata']['link_template']['parameters']['deadurl'] = "yes";
+                            else $link['newdata']['link_template']['parameters']['dead-url'] = "yes";
+                        }
+                    }    
+                } elseif( $link[$link['link_type']]['tagged_dead'] === true && $link[$link['link_type']]['is_dead'] == false ) {
+                    $rescued++;
+                    $modifiedLinks[$id]['type'] = "tagremoved";
+                    $modifiedLinks[$id]['link'] = $link[$link['link_type']]['url'];
+                    $link['newdata']['tagged_dead'] = false;
+                }   
+            }
+        }
+        if( isset( $link['newdata'] ) && newIsNew( $link ) ) {
+            $link['newstring'] = generateString( $link, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS );
+            $newtext = str_replace( $link['string'], $link['newstring'], $newtext );
+        }
+    }
+    $archiveResponse = $checkResponse = $fetchResponse = null;
+    unset( $archiveResponse, $checkResponse, $fetchResponse );
+    if( WORKERS === true ) {
+        echo "Analyzed $page ($pageid)\n";
+    }
+    echo "Rescued: $rescued; Tagged dead: $tagged; Archived: $archived; Memory Used: ".(memory_get_usage( true )/1048576)." MB; Max System Memory Used: ".(memory_get_peak_usage(true)/1048576)." MB\n\n";
+    if( !empty( $archiveProblems ) && $NOTIFY_ERROR_ON_TALK == 1 ) {
+        $body = str_replace( "{problematiclinks}", $out, str_replace( "\\n", "\n", $TALK_ERROR_MESSAGE ) )."~~~~";
+        $out = "";
+        foreach( $archiveProblems as $id=>$problem ) {
+            $out .= "* $problem with error {$errors[$id]}\n";
+        } 
+        $body = str_replace( "{problematiclinks}", $out, str_replace( "\\n", "\n", $TALK_ERROR_MESSAGE ) )."~~~~";
+        edit( "Talk:$page", $body, "Notifications of sources failing to archive.", $timestamp, true, "new", $TALK_ERROR_MESSAGE_HEADER );  
+    }
+    $pageModified = false;
+    if( $oldtext != $newtext ) {
+        $pageModified = true;
+        $revid = edit( $page, $newtext, "Rescuing $rescued sources, flagging $tagged as dead, and archiving $archived sources.", false, $timestamp );
+        if( $NOTIFY_ON_TALK == 1 && $revid !== false ) {
+            $out = "";
+            foreach( $modifiedLinks as $link ) {
+                $out .= "*";
+                switch( $link['type'] ) {
+                    case "addarchive":
+                    $out .= "Added archive {$link['newarchive']} to ";
+                    break;
+                    case "modifyarchive":
+                    $out .= "Replaced archive link {$link['oldarchive']} with {$link['newarchive']} on ";
+                    break;
+                    case "fix":
+                    $out .= "Attempted to fix sourcing for ";
+                    break;
+                    case "tagged":
+                    $out .= "Added {{tlx|dead link}} tag to ";
+                    break;
+                    case "tagremoved":
+                    $out .= "Removed dead tag from ";
+                    break;
+                    default:
+                    $out .= "Modified source for ";
+                    break;
+                }
+                $out .= $link['link'];
+                $out .= "\n";     
+            }
+            $header = str_replace( "{namespacepage}", $page, str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, $TALK_MESSAGE_HEADER ) ) ) );
+            $body = str_replace( "{diff}", "https://en.wikipedia.org/w/index.php?diff=prev&oldid=$revid", str_replace( "{modifiedlinks}", $out, str_replace( "{namespacepage}", $page, str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, str_replace( "\\n", "\n", $TALK_MESSAGE ) ) ) ) ) ) )."~~~~";
+            edit( "Talk:$page", $body, "Notification of altered sources needing review", false, $timestamp, true, "new", $header );
+        }
+    }
+    $oldtext = $newtext = $history = null;
+    unset( $oldtext, $newtext, $history );
+    $returnArray = array( 'archiveProblems'=>$archiveProblems, 'errors'=>$errors, 'linksanalyzed'=>$analyzed, 'linksarchived'=>$archived, 'linksrescued'=>$rescued, 'linkstagged'=>$tagged, 'newlyArchived'=>$newlyArchived, 'pagemodified'=>$pageModified );
+    return $returnArray;
+}
+
+//Multithread safe API functions
+function botLogon( $user, $pass ) {
+    echo "Logging on as $user...";
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    $post = array( 'action'=>'login', 'lgname'=>$user, 'lgpassword'=>$pass, 'format'=>'php' );
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 0 );
+    curl_setopt( $curl, CURLOPT_POST, 1 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
+    curl_setopt( $curl, CURLOPT_POSTFIELDS, $post );
+    curl_setopt( $curl, CURLOPT_URL, API ); 
+    $data = curl_exec( $curl ); 
+    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+    $data = trim( substr( $data, $header_size ) );
+    $data = unserialize( $data );
+    $post['lgtoken'] = $data['login']['token'];
+    curl_setopt( $curl, CURLOPT_POSTFIELDS, $post );
+    $data = curl_exec( $curl ); 
+    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+    $data = trim( substr( $data, $header_size ) );
+    $data = unserialize( $data );
+    curl_close( $curl );
+    $curl = null;
+    unset( $curl );
+    if( $data['login']['result'] == "Success" ) {
+        echo "Success!!\n\n";
+        return true;
+    }
+    else {
+        echo "Failed!!\n\n";
+        return false;
+    }
+}
+
+function isLoggedOn( $user ) {
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    $get = "action=query&meta=userinfo&format=php";
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+    curl_setopt( $curl, CURLOPT_POST, 0 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
+    curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+    $data = curl_exec( $curl ); 
+    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+    $data = trim( substr( $data, $header_size ) );
+    $data = unserialize( $data );
+    curl_close( $curl );
+    $curl = null;
+    unset( $curl );
+    if( $data['query']['userinfo']['name'] == $user ) return true;
+    else return false;
+}
+
+function getPageText( $page ) {
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    $get = "action=raw&title=".urlencode($page);
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+    curl_setopt( $curl, CURLOPT_POST, 0 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
+    $api = str_replace( "api.php", "index.php", API );
+    curl_setopt( $curl, CURLOPT_URL, $api."?$get" ); 
+    $data = curl_exec( $curl ); 
+    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+    $data = trim( substr( $data, $header_size ) );
+    curl_close( $curl );
+    $curl = null;
+    unset( $curl );
+    return $data;   
+}
+
+function getTaggedArticles( $titles, $limit, $resume ) {
+    $returnArray = array();
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+    curl_setopt( $curl, CURLOPT_POST, 0 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );    
+    while( true ) {
+        $get = "action=query&prop=transcludedin&format=php&tinamespace=0&tilimit=".($limit-count($returnArray)).( empty($resume) ? "" : "&ticontinue=$resume" )."&rawcontinue=&titles=".urlencode($titles);
+        curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        $data = curl_exec( $curl ); 
+        $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+        $data = trim( substr( $data, $header_size ) );
+        $data = unserialize( $data ); 
+         foreach( $data['query']['pages'] as $template ) {
+            if( isset( $template['transcludedin'] ) ) $returnArray = array_merge( $returnArray, $template['transcludedin'] );
+        } 
+        if( isset( $data['query-continue']['transcludedin']['ticontinue'] ) ) $resume = $data['query-continue']['transcludedin']['ticontinue'];
+        else {
+            $resume = "";
+            break;
+        } 
+        if( $limit <= count( $returnArray ) ) break; 
+    }
+    curl_close( $curl );
+    $curl = null;
+    unset( $curl );
+    return array( $returnArray, $resume);
+}
+
+function getPageHistory( $page, $limit ) {
+    $returnArray = array();
+    $resume = "";
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+    curl_setopt( $curl, CURLOPT_POST, 0 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );    
+    while( true ) {
+        $get = "action=query&prop=revisions&format=php&rvprop=timestamp%7Ccontent&rvlimit=".($limit-count($returnArray)).( empty($resume) ? "" : "&rvcontinue=$resume" )."&rawcontinue=&titles=".urlencode($page);
+        curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        $data = curl_exec( $curl ); 
+        $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+        $data = trim( substr( $data, $header_size ) );
+        $data = unserialize( $data ); 
+        foreach( $data['query']['pages'] as $template ) {
+            if( isset( $template['revisions'] ) ) $returnArray = array_merge( $returnArray, $template['revisions'] );
+        } 
+        if( isset( $data['query-continue']['revisions']['rvcontinue'] ) ) $resume = $data['query-continue']['revisions']['rvcontinue'];
+        else {
+            $resume = "";
+            break;
+        } 
+        if( $limit <= count( $returnArray ) ) break; 
+    }
+    curl_close( $curl );
+    $curl = null;
+    unset( $curl );
+    return $returnArray;    
+}
+
+function isEnabled( $runpage ) {
+    $text = getPageText( $runpage );
+    if( $text == "enable" ) return true;
+    else return false;
+}
+
+function nobots( $text, $username = "", $taskname = "" ) {
+    if( strpos( $text, "{{nobots}}" ) !== false ) return true;
+    if( strpos( $text, "{{bots}}" ) !== false ) return false;
+
+    if( preg_match( '/\{\{bots\s*\|\s*allow\s*=\s*(.*?)\s*\}\}/i', $text, $allow ) ) {
+        if( $allow[1] == "all" ) return false;
+        if( $allow[1] == "none" ) return true;
+        $allow = array_map( 'trim', explode( ',', $allow[1] ) );
+        if( !is_null( $username ) && in_array( trim( $username ), $allow ) ) {
+            return false;
+        }
+        return true;
+    }
+
+    if( preg_match( '/\{\{(no)?bots\s*\|\s*deny\s*=\s*(.*?)\s*\}\}/i', $text, $deny ) ) {
+        if( $deny[2] == "all" ) return true;
+        if( $deny[2] == "none" ) return false;
+        $allow = array_map( 'trim', explode( ',', $deny[2] ) );
+        if( ( !is_null( $username ) && in_array( trim( $username ), $allow ) ) || ( !is_null( $taskname ) && in_array( trim( $taskname ), $allow ) ) ) {
+            return true;
+        }
+        return false;
+    }
+    return false;   
+}
+
+function edit( $page, $text, $summary, $minor = false, $timestamp = false, $bot = true, $section = false, $title = "" ) {
+    if( !isEnabled( RUNPAGE ) ) {
+        echo "ERROR: BOT IS DISABLED!!\n\n";
+        return false; 
+    }
+    if( NOBOTS === true && nobots( $text, USERNAME, TASKNAME ) ) {
+        echo "ERROR: RESTRICTED BY NOBOTS!!\n\n";
+        return false;
+    }
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    $post = array( 'action'=>'edit', 'title'=>$page, 'text'=>$text, 'format'=>'php', 'summary'=>$summary, 'md5'=>md5($text), 'nocreate'=>'yes' );
+    if( $minor ) {
+        $post['minor'] = 'yes';
+    } else {
+        $post['notminor'] = 'yes';
+    }
+    if( $timestamp ) {
+        $post['basetimestamp'] = $timestamp;
+        $post['starttimestamp'] = $timestamp;
+    }
+    if( $bot ) {
+        $post['bot'] = 'yes';
+    }
+    if( $section == "new" ) {
+        $post['section'] = "new";
+        $post['sectiontitle'] = $title;
+        $post['redirect'] = "yes";
+    } elseif( $section == "append" ) {
+        $post['appendtext'] = $text;
+        $post['redirect'] = "yes";
+    }
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+    curl_setopt( $curl, CURLOPT_POST, 0 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
+    $get = "action=query&meta=tokens&format=php";    
+    curl_setopt( $curl, CURLOPT_URL, API."?$get" );
+    $data = curl_exec( $curl ); 
+    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+    $data = trim( substr( $data, $header_size ) );
+    $data = unserialize( $data );
+    $post['token'] = $data['query']['tokens']['csrftoken'];
+    curl_setopt( $curl, CURLOPT_HTTPGET, 0 );
+    curl_setopt( $curl, CURLOPT_POST, 1 );
+    curl_setopt( $curl, CURLOPT_POSTFIELDS, $post );
+    curl_setopt( $curl, CURLOPT_URL, API ); 
+    $data = curl_exec( $curl ); 
+    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+    $data = trim( substr( $data, $header_size ) );
+    $data = unserialize( $data );
+    curl_close( $curl );
+    $curl = null;
+    unset( $curl );
+    if( isset( $data['edit'] ) && $data['edit']['result'] == "Success" && !isset( $data['edit']['nochange']) ) {
+        return $data['edit']['newrevid'];
+    } else {
+        return false;
+    }
+}
+
+function getAllArticles( $limit, $resume ) {
+    $returnArray = array();
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+    curl_setopt( $curl, CURLOPT_POST, 0 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );    
+    while( true ) {
+        $get = "action=query&list=allpages&format=php&apnamespace=0&apfilterredir=nonredirects&aplimit=".($limit-count($returnArray))."&rawcontinue=&apcontinue=$resume";
+        curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        $data = curl_exec( $curl ); 
+        $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+        $data = trim( substr( $data, $header_size ) );
+        $data = unserialize( $data ); 
+        $returnArray = array_merge( $returnArray, $data['query']['allpages'] );
+        if( isset( $data['query-continue']['allpages']['apcontinue'] ) ) $resume = $data['query-continue']['allpages']['apcontinue'];
+        else {
+            $resume = "";
+            break;
+        } 
+        if( $limit <= count( $returnArray ) ) break; 
+    }
+    curl_close( $curl );
+    $curl = null;
+    unset( $curl );
+    return array( $returnArray, $resume);
+}
+
+//Multithread engine
+
+//This thread class allows for asyncronous function calls.  This is useful for the functions that consume time and can run in the background.
+//Caution must be excercised to ensure that the functions are thread safe.
+class AsyncFunctionCall extends Thread {
+    
+    protected $method;
+    protected $params;
+    public $result;
+    
+    public function __construct( $method, $params ) {
+        $this->method = $method;
+        $this->params = $params;
+        $this->result = null; 
+    }
+    
+    public function run() {
+        if (($this->result=call_user_func_array($this->method, $this->params))) {
+            return true;
+        } else return false;
+    }
+    
+    public static function call($method, $params){
+        $thread = new AsyncFunctionCall($method, $params);
+        if($thread->start()){
+            return $thread;
+        } else {
+            echo "Unable to initiate background function $method!\n";
+            return false;
+        }
+    }
+}
+
+// Analyze multiple pages simultaneously and edit them.
+class ThreadedBot extends Collectable {
+    
+    protected $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN;
+    
+    public $result;
+    
+    public function __construct($page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN) {
+        $this->page = $page;
+        $this->pageid = $pageid;
+        $this->alreadyArchived = $alreadyArchived;
+        $this->ARCHIVE_ALIVE = $ARCHIVE_ALIVE;
+        $this->TAG_OVERRIDE = $TAG_OVERRIDE;
+        $this->ARCHIVE_BY_ACCESSDATE = $ARCHIVE_BY_ACCESSDATE;
+        $this->TOUCH_ARCHIVE = $TOUCH_ARCHIVE;
+        $this->DEAD_ONLY = $DEAD_ONLY;
+        $this->NOTIFY_ERROR_ON_TALK = $NOTIFY_ERROR_ON_TALK;
+        $this->NOTIFY_ON_TALK = $NOTIFY_ON_TALK;
+        $this->TALK_MESSAGE_HEADER = $TALK_MESSAGE_HEADER;
+        $this->TALK_MESSAGE = $TALK_MESSAGE;
+        $this->TALK_ERROR_MESSAGE_HEADER = $TALK_ERROR_MESSAGE_HEADER;
+        $this->TALK_ERROR_MESSAGE = $TALK_ERROR_MESSAGE;
+        $this->DEADLINK_TAGS = $DEADLINK_TAGS;
+        $this->CITATION_TAGS = $CITATION_TAGS;
+        $this->IGNORE_TAGS = $IGNORE_TAGS;
+        $this->ARCHIVE_TAGS = $ARCHIVE_TAGS;
+        $this->VERIFY_DEAD = $VERIFY_DEAD;
+        $this->LINK_SCAN = $LINK_SCAN;    
+    }
+    
+    public function run() {
+        $this->result = analyzePage( $this->page, $this->pageid, $this->alreadyArchived, $this->ARCHIVE_ALIVE, $this->TAG_OVERRIDE, $this->ARCHIVE_BY_ACCESSDATE, $this->TOUCH_ARCHIVE, $this->DEAD_ONLY, $this->NOTIFY_ERROR_ON_TALK, $this->NOTIFY_ON_TALK, $this->TALK_MESSAGE_HEADER, $this->TALK_MESSAGE, $this->TALK_ERROR_MESSAGE_HEADER, $this->TALK_ERROR_MESSAGE, $this->DEADLINK_TAGS, $this->CITATION_TAGS, $this->IGNORE_TAGS, $this->ARCHIVE_TAGS, $this->VERIFY_DEAD, $this->LINK_SCAN);
+        $this->setGarbage();
+        $this->page = null;
+        $this->pageid = null;
+        $this->alreadyArchived = null;
+        $this->ARCHIVE_ALIVE = null;
+        $this->TAG_OVERRIDE = null;
+        $this->ARCHIVE_BY_ACCESSDATE = null;
+        $this->TOUCH_ARCHIVE = null;
+        $this->DEAD_ONLY = null;
+        $this->NOTIFY_ERROR_ON_TALK = null;
+        $this->NOTIFY_ON_TALK = null;
+        $this->TALK_MESSAGE_HEADER = null;
+        $this->TALK_MESSAGE = null;
+        $this->TALK_ERROR_MESSAGE_HEADER = null;
+        $this->TALK_ERROR_MESSAGE = null;
+        $this->DEADLINK_TAGS = null;
+        $this->CITATION_TAGS = null;
+        $this->IGNORE_TAGS = null;
+        $this->ARCHIVE_TAGS = null;
+        $this->VERIFY_DEAD = null;
+        $this->LINK_SCAN = null;
+        unset( $this->page, $this->pageid, $this->alreadyArchived, $this->ARCHIVE_ALIVE, $this->TAG_OVERRIDE, $this->ARCHIVE_BY_ACCESSDATE, $this->TOUCH_ARCHIVE, $this->DEAD_ONLY, $this->NOTIFY_ERROR_ON_TALK, $this->NOTIFY_ON_TALK, $this->TALK_MESSAGE_HEADER, $this->TALK_MESSAGE, $this->TALK_ERROR_MESSAGE_HEADER, $this->TALK_ERROR_MESSAGE, $this->DEADLINK_TAGS, $this->CITATION_TAGS, $this->IGNORE_TAGS, $this->ARCHIVE_TAGS, $this->VERIFY_DEAD, $this->LINK_SCAN );
+    }
 }
 ?>

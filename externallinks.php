@@ -383,7 +383,7 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             else $success = false;
         }
         placenotice:
-        if( !is_null( $talkpageobject ) && $success !== false ) {
+        /*if( !is_null( $talkpageobject ) && $success !== false ) {
             $out2 = "";
             foreach ( $page['urls'] as $l=>$url ) {
                 $out2 .= "\n*<nowiki>$url</nowiki>";
@@ -396,13 +396,13 @@ if( isset( $status['status'] ) && $status['status'] == 'remove' ) goto removing;
             $talkout .= "'''Below is a list of links that were found on the main page:'''\n".$out2;
             $talkout .= "\n\nIf you would like me to provide more information on the talk page, contact [[User:Cyberpower678]] and ask him to program me with more info.\n\nFrom your friendly hard working bot.~~~~";
             $talkpageobject->newsection( $talkout, "Blacklisted Links Found on [[".$pageobject->get_title( true )."]]", "Notification of blacklisted links on [[".$pageobject->get_title( true )."]]." );
-        }
+        }*/
         $completed = ($i/$count)*100;
         $completedin = (((time() - $starttime)*100)/$completed)-(time() - $starttime);
         $completedby = time() + $completedin; 
         $status = array( 'status' => 'tag', 'bladd'=>$a, 'bldeleted'=>$d, 'blexception'=>$e, 'scanprogress'=>"x", 'scantype'=>'x', 'editprogress'=>round($completed, 3)."% ($i of $count)", 'editeta'=>round($completedby, 0) ); 
         updateStatus();   
-    }
+    } 
 
     //search for misplaced tags and remove them.
     removing:
