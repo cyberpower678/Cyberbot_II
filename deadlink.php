@@ -40,6 +40,7 @@ $ARCHIVE_ALIVE = 1;
 $alreadyArchived = array();
 $lastcheck = time();
 if( file_exists( DLAA ) ) $alreadyArchived = unserialize( file_get_contents( DLAA ) );
+if( is_null( $alreadyArchived ) ) $alreadyArchived = array();
 
 while( true ) {
     echo "----------RUN TIMESTAMP: ".date('r')."----------\n\n";
@@ -109,18 +110,24 @@ while( true ) {
     do {
         $iteration++;
         //fetch the pages we want to analyze and edit.  This fetching process is done in batches to preserve memory. 
-        if( $debug === true ) {         //This fetches a specific page for debugging purposes
+        if( $debug === true && $debugStyle == "test" ) {    //This fetches a specific page for debugging purposes
             echo "Fetching test pages...\n";
             $pages = array( $debugPage );   
-        } elseif( $PAGE_SCAN == 0 ) {   //This fetches all the articles, or a batch of them.
-            echo "Fetching article pages...\n";
-            $pages = getAllArticles( 5000, $return );
+        } elseif( $PAGE_SCAN == 0 ) {                       //This fetches all the articles, or a batch of them.
+            echo "Fetching";
+            if( $debug === true && is_int( $debugStyle ) ) echo " ".$debugStyle;
+            echo " article pages...\n";
+            if( $debug === true && is_int( $debugStyle ) ) $pages = getAllArticles( 5000, $return );
+            else $pages = getAllArticles( 5000, $return );
             $return = $pages[1];
             $pages = $pages[0];
             echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n";
-        } elseif( $PAGE_SCAN == 1 ) {   //This fetches only articles with a deadlink tag in it, or a batch of them
-            echo "Fetching articles with links marked as dead...\n";
-            $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), 5000, $return );
+        } elseif( $PAGE_SCAN == 1 ) {                       //This fetches only articles with a deadlink tag in it, or a batch of them
+            echo "Fetching";
+            if( $debug === true && is_int( $debugStyle ) ) echo " ".$debugStyle;
+            echo " articles with links marked as dead...\n";
+            if( $debug === true && is_int( $debugStyle ) ) $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), $debugStyle, $return );
+            else $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), 5000, $return );
             $return = $pages[1];
             $pages = $pages[0];
             echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n"; 
@@ -173,17 +180,17 @@ while( true ) {
             //}
         }
         unset( $pages );
-    } while( !empty( $return ) ); 
+    } while( !empty( $return ) && debug === false ); 
     $runend = time();
     $runtime = $runend-$runstart;
     echo "Updating list of failed archive attempts...\n\n";
     $out = "";
     foreach( $failedToArchive as $id=>$link ) $out .= "\n*$link with error '''{$allerrors[$id]}'''";
-    edit( "User:Cyberbot II/Links that won't archive", $out, "Updating list of links that won't archive.", true, false, true, "append" );
+    if( $debug === false ) edit( "User:Cyberbot II/Links that won't archive", $out, "Updating list of links that won't archive.", true, false, true, "append" );
     echo "Printing log report, and starting new run...\n\n";
     if( $debug === false ) generateLogReport();  
-    sleep(10);
-    exit(0);                                           
+    if( $debug === false ) sleep(10);
+    if( $debug === true ) exit(0);                                           
 }
 
 //Create run log information
@@ -298,7 +305,7 @@ function newIsNew( $link ) {
 }
 
 //Gather and parse all references and return as organized array
-function getReferences( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ) {
+function getReferences( $page, &$history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $paget ) {
     $linksAnalyzed = 0;
     $tArray = array_merge( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS );
     $returnArray = array();   
@@ -309,7 +316,7 @@ function getReferences( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_
         if( !isset( $returnArray[$tid] ) ) {
             $returnArray[$tid]['link_type'] = "reference";
             //Fetch parsed reference content
-            $returnArray[$tid]['reference'] = getLinkDetails( $params[2][$tid], $params[3][$tid].$params[5][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ); 
+            $returnArray[$tid]['reference'] = getLinkDetails( $params[2][$tid], $params[3][$tid].$params[5][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $paget ); 
             $returnArray[$tid]['string'] = $params[0][$tid];
         }
         //Fetch reference parameters
@@ -324,7 +331,7 @@ function getReferences( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_
 }
 
 //Gather and parse all external links including references
-function getExternalLinks( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ) {
+function getExternalLinks( $page, &$history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $paget ) {
     $linksAnalyzed = 0;
     $tArray = array_merge( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS );
     $returnArray = array();
@@ -335,7 +342,7 @@ function getExternalLinks( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNO
         if( !empty( $params[2][$tid] ) || !empty( $params[2][$tid] ) || !empty( $params[3][$tid] ) ) {
             $returnArray[$tid]['link_type'] = "reference";
             //Fetch parsed reference content
-            $returnArray[$tid]['reference'] = getLinkDetails( $params[3][$tid], $params[4][$tid].$params[6][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ); 
+            $returnArray[$tid]['reference'] = getLinkDetails( $params[3][$tid], $params[4][$tid].$params[6][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $paget ); 
             $returnArray[$tid]['string'] = $params[0][$tid];
             //Fetch reference parameters
             if( !empty( $params[2][$tid] ) ) $returnArray[$tid]['reference']['parameters'] = getReferenceParameters( $params[2][$tid] );
@@ -346,12 +353,12 @@ function getExternalLinks( $page, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNO
         } elseif( !empty( $params[8][$tid] ) ) {
             $returnArray[$tid]['link_type'] = "externallink";
             //Fetch parsed reference content
-            $returnArray[$tid]['externallink'] = getLinkDetails( $params[0][$tid], $params[9][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ); 
+            $returnArray[$tid]['externallink'] = getLinkDetails( $params[0][$tid], $params[9][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $paget ); 
             $returnArray[$tid]['string'] = $params[0][$tid];
         } elseif( !empty( $params[11][$tid] ) || !empty( $params[13][$tid] ) ) {
             $returnArray[$tid]['link_type'] = "template";
             //Fetch parsed reference content
-            $returnArray[$tid]['template'] = getLinkDetails( $params[11][$tid], $params[13][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD );
+            $returnArray[$tid]['template'] = getLinkDetails( $params[11][$tid], $params[13][$tid], $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $paget );
             $returnArray[$tid]['name'] = str_replace( "{{", "", $params[12][$tid] );
             $returnArray[$tid]['string'] = $params[0][$tid];
         }
@@ -371,7 +378,7 @@ function getReferenceParameters( $refparamstring ) {
 }
 
 //This is the parsing engine.  It picks apart the string in every detail, so the bot can accurately construct an appropriate reference.
-function getLinkDetails( $linkString, $remainder, $history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD ) {
+function getLinkDetails( $linkString, $remainder, &$history, $ARCHIVE_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $DEADLINK_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $page ) {
     $returnArray = array();
     $returnArray['link_string'] = $linkString;
     $returnArray['remainder'] = $remainder;              
@@ -547,7 +554,7 @@ function getLinkDetails( $linkString, $remainder, $history, $ARCHIVE_TAGS, $CITA
         else return array( 'ignore' => true );
         if( isset( $returnArray['link_template']['parameters']['accessdate']) && !empty( $returnArray['link_template']['parameters']['accessdate'] ) ) $returnArray['access_time'] = strtotime( $returnArray['link_template']['parameters']['accessdate'] );
         elseif( isset( $returnArray['link_template']['parameters']['access-date'] ) && !empty( $returnArray['link_template']['parameters']['access-date'] ) ) $returnArray['access_time'] = strtotime( $returnArray['link_template']['parameters']['access-date'] );
-        else $returnArray['access_time'] = getTimeAdded( $returnArray['url'], $history );
+        else $returnArray['access_time'] = getTimeAdded( $returnArray['url'], $history, $page );
         if( isset( $returnArray['link_template']['parameters']['archiveurl'] ) ) $returnArray['archive_url'] = $returnArray['link_template']['parameters']['archiveurl'];  
         if( isset( $returnArray['link_template']['parameters']['archive-url'] ) ) $returnArray['archive_url'] = $returnArray['link_template']['parameters']['archive-url'];
         if( isset( $returnArray['link_template']['parameters']['archiveurl'] ) || isset( $returnArray['link_template']['parameters']['archive-url'] ) ) {
@@ -564,7 +571,7 @@ function getLinkDetails( $linkString, $remainder, $history, $ARCHIVE_TAGS, $CITA
     } elseif( preg_match( '/((?:https?:)?\/\/.*?)(\s|\])/i', $linkString, $params ) ) {
         $returnArray['url'] = $params[1];
         $returnArray['link_type'] = "link"; 
-        $returnArray['access_time'] = getTimeAdded( $returnArray['url'], $history );
+        $returnArray['access_time'] = getTimeAdded( $returnArray['url'], $history, $page );
         $returnArray['is_archive'] = false;
         $returnArray['tagged_dead'] = false;
         $returnArray['has_archive'] = false;
@@ -639,7 +646,8 @@ function getLinkDetails( $linkString, $remainder, $history, $ARCHIVE_TAGS, $CITA
     return $returnArray;
 }
 //Look for the time the link was added.
-function getTimeAdded( $url, $history ) {
+function getTimeAdded( $url, &$history, $page ) {
+    if( empty( $history ) ) $history = getPageHistory( $page, 10000 );
     if( empty( $url ) ) return time();
     $time = time();
     foreach( $history as $revision ) {
@@ -877,17 +885,13 @@ function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVE
     $tagged = 0;
     $analyzed = 0;
     $newlyArchived = array();
-    $timestamp = date( "Y-m-d\TH:i:s\Z" );
-    $history = getPageHistory( $page, 10000 );  
+    $timestamp = date( "Y-m-d\TH:i:s\Z" ); 
+    $history = array(); 
     $oldtext = $newtext = getPageText( $page );
-    //Step further into the program until the memory starts to accumulate.
-    $oldtext = $newtext = $history = null;
-    unset( $oldtext, $newtext, $history );
-    return false;
     if( preg_match( '/\{\{((U|u)se)?\s?(D|d)(MY|my)\s?(dates)?/i', $oldtext ) ) $df = true;
     else $df = false;
-    if( $LINK_SCAN == 0 ) $links = getExternalLinks( $oldtext, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD );
-    else $links = getReferences( $oldtext, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD );
+    if( $LINK_SCAN == 0 ) $links = getExternalLinks( $oldtext, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $page );
+    else $links = getReferences( $oldtext, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $page );
     $analyzed = $links['count'];
     unset( $links['count'] );
                                    
@@ -1274,7 +1278,7 @@ function getPageHistory( $page, $limit ) {
         $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
         $data = trim( substr( $data, $header_size ) );
         $data = unserialize( $data ); 
-        foreach( $data['query']['pages'] as $template ) {
+        if( isset( $data['query']['pages'] ) ) foreach( $data['query']['pages'] as $template ) {
             if( isset( $template['revisions'] ) ) $returnArray = array_merge( $returnArray, $template['revisions'] );
         } 
         if( isset( $data['query-continue']['revisions']['rvcontinue'] ) ) $resume = $data['query-continue']['revisions']['rvcontinue'];
@@ -1282,11 +1286,12 @@ function getPageHistory( $page, $limit ) {
             $resume = "";
             break;
         } 
+        $data = null;
         if( $limit <= count( $returnArray ) ) break; 
     }
     curl_close( $curl );
-    $curl = null;
-    unset( $curl );
+    $data = $curl = null;
+    unset( $curl, $data );
     return $returnArray;    
 }
 

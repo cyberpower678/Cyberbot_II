@@ -4,6 +4,7 @@
     //Activate this to run the bot on a specific page for debugging purposes.
     $debug = false;
     $debugPage = array( 'title'=>"", 'pageid'=>0 );
+    $debugStyle = 20;   //Use an int to run through a limited amount of articles.  Use "test" to run the test pages.
 
     //Set the bot's UA
     $userAgent = '';
