@@ -6,7 +6,7 @@ This software uses the MW API
 This software uses the Wayback API
 */
 
-ini_set('memory_limit','2G');
+ini_set('memory_limit','1G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once( 'deadlink.config.inc.php' );
 
@@ -97,10 +97,6 @@ while( true ) {
     preg_match( '/\n\|ARCHIVE_ALIVE\s*=\s*(\d+)/i', $config, $param1 );
     if( isset( $param1[1] ) ) $ARCHIVE_ALIVE = $param1[1];
     foreach( $DEAD_RULES as $tid => $rule ) $DEAD_RULES[$tid] = explode( ":", $rule );
-    foreach( $DEADLINK_TAGS as $tag ) $DEADLINK_TAGS[] = substr_replace( $tag, strtoupper( substr( $tag, 2, 1 ) ), 2, 1 );
-    foreach( $CITATION_TAGS as $tag ) $CITATION_TAGS[] = substr_replace( $tag, strtoupper( substr( $tag, 2, 1 ) ), 2, 1 );
-    foreach( $ARCHIVE_TAGS as $tag ) $ARCHIVE_TAGS[] = substr_replace( $tag, strtoupper( substr( $tag, 2, 1 ) ), 2, 1 );
-    foreach( $IGNORE_TAGS as $tag ) $IGNORE_TAGS[] = substr_replace( $tag, strtoupper( substr( $tag, 2, 1 ) ), 2, 1 );
     foreach( $DEADLINK_TAGS as $tid=>$tag ) $DEADLINK_TAGS[$tid] = preg_quote( $tag, '/' );
     foreach( $CITATION_TAGS as $tid=>$tag ) $CITATION_TAGS[$tid] = preg_quote( $tag, '/' );
     foreach( $ARCHIVE_TAGS as $tid=>$tag ) $ARCHIVE_TAGS[$tid] = preg_quote( $tag, '/' );
@@ -149,35 +145,32 @@ while( true ) {
                 file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
             }
         } else {
-            //for( $i = 0; $i < count( $pages ); $i += $workerLimit ) {
-                $workerQueue = new Pool( $workerLimit );
-                //$tpages = array_slice( $pages, $i, $workerLimit );
-                foreach( $pages as $tid => $tpage ) {
-                    $pagesAnalyzed++;
-                    echo "Submitted {$tpage['title']}, job ".($tid+1)." for analyzing...\n";
-                    $workerQueue->submit( new ThreadedBot( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN ) );
-                           
-                }
-                $workerQueue->shutdown();
-                $workerQueue->collect(
-                function( $thread ) {
-                    global $pagesModified, $linksAnalyzed, $linksArchived, $linksFixed, $linksTagged, $alreadyArchived, $failedToArchive, $allerrors;
-                    $stats = $thread->result;
-                    if( $stats['pagemodified'] === true ) $pagesModified++;
-                    $linksAnalyzed += $stats['linksanalyzed'];
-                    $linksArchived += $stats['linksarchived'];
-                    $linksFixed += $stats['linksrescued'];
-                    $linksTagged += $stats['linkstagged'];
-                    $alreadyArchived = array_merge( $stats['newlyArchived'], $alreadyArchived );
-                    $failedToArchive = array_merge( $failedToArchive, $stats['archiveProblems'] );
-                    $allerrors = array_merge( $allerrors, $stats['errors'] );
-                    return $thread->isGarbage();
-                });
-                echo "!!!!!!!!!!!!!!Links analyzed so far: $linksAnalyzed\n\n";
-                file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
-                //$workerQueue = null;
-                //unset( $workerQueue );
-            //}
+            $workerQueue = new Pool( $workerLimit );
+            foreach( $pages as $tid => $tpage ) {
+                $pagesAnalyzed++;
+                echo "Submitted {$tpage['title']}, job ".($tid+1)." for analyzing...\n";
+                $workerQueue->submit( new ThreadedBot( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN ) );
+                       
+            }
+            $workerQueue->shutdown();  
+            $workerQueue->collect(
+            function( $thread ) {  
+                global $pagesModified, $linksAnalyzed, $linksArchived, $linksFixed, $linksTagged, $alreadyArchived, $failedToArchive, $allerrors;
+                $stats = $thread->result;
+                if( $stats['pagemodified'] === true ) $pagesModified++;
+                $linksAnalyzed += $stats['linksanalyzed'];
+                $linksArchived += $stats['linksarchived'];
+                $linksFixed += $stats['linksrescued'];
+                $linksTagged += $stats['linkstagged'];
+                $alreadyArchived = array_merge( $stats['newlyArchived'], $alreadyArchived );
+                $failedToArchive = array_merge( $failedToArchive, $stats['archiveProblems'] );
+                $allerrors = array_merge( $allerrors, $stats['errors'] );
+                $stats = null;
+                unset( $stats );
+                return $thread->isGarbage();
+            });
+            echo "STATUS REPORT:\nLinks analyzed so far: $linksAnalyzed\nLinks archived so far: $linksArchived\nLinks fixed so far: $linksFixed\nLinks tagged so far: $linksTagged\n\n";
+            file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
         }
         unset( $pages );
     } while( !empty( $return ) && debug === false ); 
@@ -869,7 +862,6 @@ function multiquery( $data ) {
             $returnArray['headers'][$id] = http_parse_headers( substr( $returnArray['results'][$id], 0, $header_size ) );
             $returnArray['results'][$id] = trim( substr( $returnArray['results'][$id], $header_size ) );
         }
-        //curl_close( $curl_instances[$id] ); 
         curl_multi_remove_handle( $multicurl_resource, $curl_instances[$id] );
     }
     curl_multi_close( $multicurl_resource );
