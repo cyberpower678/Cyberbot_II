@@ -734,6 +734,8 @@ function requestArchive( $urls, $alreadyArchived ) {
             $returnArray['newlyArchived'][] = $urls[$id];
         } else $returnArray['result'][$id] = true;
     }
+    $res = null;
+    unset( $res );
     return $returnArray;
 }
 
@@ -755,6 +757,8 @@ function isArchived( $urls, $alreadyArchived ) {
         $returnArray['result'][$id] = !empty( $data );
         if( isset( $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'] ) ) $returnArray['errors'][$id] = $res['headers'][$id]['X-Archive-Wayback-Runtime-Error'];
     }
+    $res = null;
+    unset( $res );
     return $returnArray;
 }
 
@@ -781,6 +785,8 @@ function retrieveArchive( $data ) {
             $getURLs[$id] = array( 'url'=>"http://web.archive.org/cdx/search/cdx?url=$url".( !is_null( $time ) ? "&from=".date( 'YmdHis', $time ) : "" )."&output=json&limit=2&matchType=exact&filter=statuscode:(200|203|206)", 'type'=>"get" );  
         }
     }
+    $res = null;
+    unset( $res );
     if( !empty( $getURLs ) ) {
         $res = multiquery( $getURLs );
         foreach( $res['results'] as $id=>$data ) {
@@ -793,6 +799,8 @@ function retrieveArchive( $data ) {
                 $returnArray['result'][$id] = false;
             }
         }
+        $res = null;
+        unset( $res );
     } 
     return $returnArray;
 }
@@ -851,6 +859,7 @@ function multiquery( $data ) {
         do {
             $mrc = curl_multi_exec($multicurl_resource, $active);
         } while ($mrc == CURLM_CALL_MULTI_PERFORM);
+        
     }
     
     foreach( $data as $id=>$item ) {
@@ -860,7 +869,7 @@ function multiquery( $data ) {
             $returnArray['headers'][$id] = http_parse_headers( substr( $returnArray['results'][$id], 0, $header_size ) );
             $returnArray['results'][$id] = trim( substr( $returnArray['results'][$id], $header_size ) );
         }
-        curl_close( $curl_instances[$id] ); 
+        //curl_close( $curl_instances[$id] ); 
         curl_multi_remove_handle( $multicurl_resource, $curl_instances[$id] );
     }
     curl_multi_close( $multicurl_resource );
@@ -1276,8 +1285,10 @@ function getPageHistory( $page, $limit ) {
         curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
         $data = curl_exec( $curl ); 
         $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
-        $data = trim( substr( $data, $header_size ) );
-        $data = unserialize( $data ); 
+        $data2 = trim( substr( $data, $header_size ) );
+        $data = null;
+        $data = unserialize( $data2 );
+        $data2 = null; 
         if( isset( $data['query']['pages'] ) ) foreach( $data['query']['pages'] as $template ) {
             if( isset( $template['revisions'] ) ) $returnArray = array_merge( $returnArray, $template['revisions'] );
         } 
@@ -1287,11 +1298,12 @@ function getPageHistory( $page, $limit ) {
             break;
         } 
         $data = null;
+        unset($data);
         if( $limit <= count( $returnArray ) ) break; 
     }
     curl_close( $curl );
-    $data = $curl = null;
-    unset( $curl, $data );
+    $data = $data2 = $curl = null;
+    unset( $curl, $data, $data2 );
     return $returnArray;    
 }
 
