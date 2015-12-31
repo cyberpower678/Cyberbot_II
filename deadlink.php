@@ -713,7 +713,7 @@ function requestArchive( $urls, $alreadyArchived ) {
     $getURLs = array();
     $returnArray = array( 'result'=>array(), 'errors'=>array(), 'newlyArchived'=>array() );
     foreach( $urls as $id=>$url ) {
-        if( in_array( $url, $alreadyArchived ) ) {
+        if( is_array( $alreadyArchived ) && in_array( $url, $alreadyArchived ) ) {
             $returnArray['result'][$id] = null;
             continue;
         }
@@ -737,7 +737,7 @@ function isArchived( $urls, $alreadyArchived ) {
     $getURLs = array();
     $returnArray = array( 'result'=>array(), 'errors'=>array() );
     foreach( $urls as $id=>$url ) {
-        if( in_array( $url, $alreadyArchived ) ) {
+        if( is_array( $alreadyArchived ) && in_array( $url, $alreadyArchived ) ) {
             $returnArray['result'][$id] = true;
             continue;
         }
