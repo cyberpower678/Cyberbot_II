@@ -10,7 +10,7 @@ ini_set('memory_limit','1G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once( 'deadlink.config.inc.php' );
 
-botLogon( $username, $password );
+botLogon( USERNAME, $password );
 
 if( isset( $argv[1] ) ) $isWorker = true;
 else $isWorker = false;
@@ -37,21 +37,52 @@ $IGNORE_TAGS = array( "{{cbignore}}" );
 $DEAD_RULES = array();
 $VERIFY_DEAD = 1;
 $ARCHIVE_ALIVE = 1;
+$runpagecount = 0;
 $alreadyArchived = array();
-$lastcheck = time();
+$lastpage = false;
 if( file_exists( DLAA ) ) $alreadyArchived = unserialize( file_get_contents( DLAA ) );
+if( file_exists( IAPROGRESS.WIKIPEDIA ) ) $lastpage = unserialize( file_get_contents( IAPROGRESS.WIKIPEDIA ) );
+if( file_exists( IAPROGRESS.WIKIPEDIA."c" ) ) {
+    $tmp = unserialize( file_get_contents( IAPROGRESS.WIKIPEDIA."c" ) );
+    if( is_null($tmp) || empty($tmp) || empty($tmp['return']) || empty($tmp['pages'] ) ) {
+        $return = "";
+        $pages = false;
+    } else {
+        $return = $tmp['return'];
+        $pages = $tmp['pages'];
+    }
+    $tmp = null;
+    unset( $tmp );
+} else {
+    $pages = false;
+    $return = "";
+}
 if( is_null( $alreadyArchived ) ) $alreadyArchived = array();
+if( $lastpage === false || empty( $lastpage ) || is_null( $lastpage ) ) $lastpage = false;
 
 while( true ) {
     echo "----------RUN TIMESTAMP: ".date('r')."----------\n\n";
     $runstart = time();
     $runtime = 0;
-    $pagesAnalyzed = 0;
-    $linksAnalyzed = 0;
-    $linksFixed = 0;
-    $linksTagged = 0;
-    $pagesModified = 0;
-    $linksArchived = 0;
+    if( !file_exists( IAPROGRESS.WIKIPEDIA."stats" ) ) {
+        $pagesAnalyzed = 0;
+        $linksAnalyzed = 0;
+        $linksFixed = 0;
+        $linksTagged = 0;
+        $pagesModified = 0;
+        $linksArchived = 0;
+    } else {
+        $tmp = unserialize( file_get_contents( IAPROGRESS.WIKIPEDIA."stats" ) );
+        $pagesAnalyzed = $tmp['pagesAnalyzed'];
+        $linksAnalyzed = $tmp['linksAnalyzed'];
+        $linksFixed = $tmp['linksFixed'];
+        $linksTagged = $tmp['linksTagged'];
+        $pagesModified = $tmp['pagesModified'];
+        $linksArchived = $tmp['linksArchived'];
+        $runstart = $tmp['runstart'];
+        $tmp = null;
+        unset( $tmp );
+    }
     $failedToArchive = array();
     $allerrors = array();
     if( isset( $argv[2] ) && !empty( $argv[2] ) ) {
@@ -105,35 +136,68 @@ while( true ) {
     //Get started with the run
     do {
         $iteration++;
+        if( $iteration !== 1 ) {
+            $lastpage = false;
+            $pages = false;
+            $return = "";
+        }
         //fetch the pages we want to analyze and edit.  This fetching process is done in batches to preserve memory. 
-        if( $debug === true && $debugStyle == "test" ) {    //This fetches a specific page for debugging purposes
+        if( DEBUG === true && $debugStyle == "test" ) {     //This fetches a specific page for debugging purposes
             echo "Fetching test pages...\n";
             $pages = array( $debugPage );   
         } elseif( $PAGE_SCAN == 0 ) {                       //This fetches all the articles, or a batch of them.
             echo "Fetching";
-            if( $debug === true && is_int( $debugStyle ) ) echo " ".$debugStyle;
+            if( DEBUG === true && is_int( $debugStyle ) && LIMITEDRUN === false ) echo " ".$debugStyle;
             echo " article pages...\n";
-            if( $debug === true && is_int( $debugStyle ) ) $pages = getAllArticles( 5000, $return );
-            else $pages = getAllArticles( 5000, $return );
-            $return = $pages[1];
-            $pages = $pages[0];
+            if( DEBUG === true && is_int( $debugStyle ) && LIMITEDRUN === false ) {
+                 $pages = getAllArticles( 5000, $return, false );
+                 $return = $pages[1];
+                 $pages = $pages[0];
+            } elseif( $iteration !== 1 || $pages === false ) {
+                $pages = getAllArticles( 5000, $return, $lastpage );
+                $return = $pages[1];
+                $pages = $pages[0];
+                file_put_contents( IAPROGRESS.WIKIPEDIA."c", serialize( array( 'pages' => $pages, 'return' => $return ) ) );     
+            } else {
+                if( $lastpage !== false ) {
+                    foreach( $pages as $tcount => $tpage ) if( $lastpage['title'] == $tpage['title'] ) break;
+                    $pages = array_slice( $pages, $tcount + 1 );
+                }
+            }
             echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n";
         } elseif( $PAGE_SCAN == 1 ) {                       //This fetches only articles with a deadlink tag in it, or a batch of them
             echo "Fetching";
-            if( $debug === true && is_int( $debugStyle ) ) echo " ".$debugStyle;
+            if( DEBUG === true && is_int( $debugStyle ) && LIMITEDRUN === false ) echo " ".$debugStyle;
             echo " articles with links marked as dead...\n";
-            if( $debug === true && is_int( $debugStyle ) ) $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), $debugStyle, $return );
-            else $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), 5000, $return );
-            $return = $pages[1];
-            $pages = $pages[0];
+            if( DEBUG === true && is_int( $debugStyle ) && LIMITEDRUN === false ) {
+                $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), $debugStyle, $return );
+                $return = $pages[1];
+                $pages = $pages[0];
+            } elseif( $iteration !== 1 || $pages === false ) {
+                $pages = getTaggedArticles( str_replace( "{{", "Template:", str_replace( "}}", "", str_replace( "\\", "", implode( "|", $DEADLINK_TAGS ) ) ) ), 5000, $return );
+                $return = $pages[1];
+                $pages = $pages[0];
+                file_put_contents( IAPROGRESS.WIKIPEDIA."c", serialize( array( 'pages' => $pages, 'return' => $return ) ) );
+            } else {
+                if( $lastpage !== false ) {
+                    foreach( $pages as $tcount => $tpage ) if( $lastpage['title'] == $tpage['title'] ) break;
+                    $pages = array_slice( $pages, $tcount + 1 );
+                }
+            }
             echo "Round $iteration: Fetched ".count($pages)." articles!!\n\n"; 
         }
         
         //Begin page analysis
-        if( WORKERS === false ) {
+        if( WORKERS === false || DEBUG === true ) {
             foreach( $pages as $tid => $tpage ) {
                 $pagesAnalyzed++;
-                $stats = analyzePage( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN );
+                $runpagecount++;
+                if( WORKERS === false ) $stats = analyzePage( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN );
+                else {
+                    $testbot[$tid] = new ThreadedBot( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN, "test" );
+                    $testbot[$tid]->run();
+                    $stats = $testbot[$tid]->result;
+                }
                 if( $stats['pagemodified'] === true ) $pagesModified++;
                 $linksAnalyzed += $stats['linksanalyzed'];
                 $linksArchived += $stats['linksarchived'];
@@ -142,15 +206,40 @@ while( true ) {
                 $alreadyArchived = array_merge( $stats['newlyArchived'], $alreadyArchived );
                 $failedToArchive = array_merge( $failedToArchive, $stats['archiveProblems'] );
                 $allerrors = array_merge( $allerrors, $stats['errors'] );
-                file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
+                if( DEBUG === false || LIMITEDRUN === true ) file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed ) ) );
+                file_put_contents( DLAA, serialize( $alreadyArchived ) );
+                if( LIMITEDRUN === true && is_int( $debugStyle ) && $debugStyle === $runpagecount ) break;
             }
-        } else {
+        } else {   
+            if( $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
+                 while( false !== ( $entry = readdir( $handle ) ) ) {
+                    if( $entry == "." || $entry == ".." ) continue;
+                    $tmp = unserialize( file_get_contents( IAPROGRESS.WIKIPEDIA."workers/$entry" ) );
+                    if( $tmp === false ) {
+                        $tmp = null;
+                        unlink( IAPROGRESS.WIKIPEDIA."workers/$entry" );
+                        continue;
+                    }
+                    $pagesAnalyzed++;
+                    if( $tmp['pagemodified'] === true ) $pagesModified++;
+                    $linksAnalyzed += $tmp['linksanalyzed'];
+                    $linksArchived += $tmp['linksarchived'];
+                    $linksFixed += $tmp['linksrescued'];
+                    $linksTagged += $tmp['linkstagged'];
+                    $tmp = null;
+                    unlink( IAPROGRESS.WIKIPEDIA."workers/$entry" ); 
+                }
+                unset( $tmp ); 
+                file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed, 'runstart' => $runstart ) ) ); 
+            }
+            closedir( $handle );
             $workerQueue = new Pool( $workerLimit );
             foreach( $pages as $tid => $tpage ) {
                 $pagesAnalyzed++;
+                $runpagecount++;
                 echo "Submitted {$tpage['title']}, job ".($tid+1)." for analyzing...\n";
-                $workerQueue->submit( new ThreadedBot( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN ) );
-                       
+                $workerQueue->submit( new ThreadedBot( $tpage['title'], $tpage['pageid'], $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN, $tid ) );       
+                if( LIMITEDRUN === true && is_int( $debugStyle ) && $debugStyle === $runpagecount ) break;
             }
             $workerQueue->shutdown();  
             $workerQueue->collect(
@@ -169,21 +258,30 @@ while( true ) {
                 unset( $stats );
                 return $thread->isGarbage();
             });
+            if( $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
+                 while( false !== ( $entry = readdir( $handle ) ) ) {
+                    if( $entry == "." || $entry == ".." ) continue;
+                    unlink( IAPROGRESS.WIKIPEDIA."workers/$entry" ); 
+                }
+            }
+            closedir( $handle );
             echo "STATUS REPORT:\nLinks analyzed so far: $linksAnalyzed\nLinks archived so far: $linksArchived\nLinks fixed so far: $linksFixed\nLinks tagged so far: $linksTagged\n\n";
-            file_put_contents( $dlaaLocation, serialize( $alreadyArchived ) );
+            file_put_contents( DLAA, serialize( $alreadyArchived ) );
+            file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed, 'runstart' => $runstart ) ) );
         }
         unset( $pages );
-    } while( !empty( $return ) && debug === false ); 
+    } while( !empty( $return ) && DEBUG === false && LIMITEDRUN === false ); 
     $runend = time();
     $runtime = $runend-$runstart;
     echo "Updating list of failed archive attempts...\n\n";
     $out = "";
     foreach( $failedToArchive as $id=>$link ) $out .= "\n*$link with error '''{$allerrors[$id]}'''";
-    if( $debug === false ) edit( "User:Cyberbot II/Links that won't archive", $out, "Updating list of links that won't archive.", true, false, true, "append" );
+    if( DEBUG === false || LIMITEDRUN === true ) edit( "User:Cyberbot II/Links that won't archive", $out, "Updating list of links that won't archive. #IABot", true, false, true, "append" );
     echo "Printing log report, and starting new run...\n\n";
-    if( $debug === false ) generateLogReport();  
-    if( $debug === false ) sleep(10);
-    if( $debug === true ) exit(0);                                           
+    if( DEBUG === false && LIMITEDRUN === false ) generateLogReport();
+    if( file_exists( IAPROGRESS.WIKIPEDIA."stats" ) && LIMITEDRUN === false ) unlink( IAPROGRESS.WIKIPEDIA."stats" );  
+    if( DEBUG === false && LIMITEDRUN === false ) sleep(10);
+    if( DEBUG === true || LIMITEDRUN === true ) exit(0);                                           
 }
 
 //Create run log information
@@ -210,7 +308,7 @@ function generateLogReport() {
     $entry .= $linksArchived;
     $entry .= "\n";
     $log = str_replace( "|}", $entry."|}", $log );
-    edit( "User:Cyberbot II/Dead-Links Log", $log, "Updating run log with run statistics" );
+    edit( "User:Cyberbot II/Dead-Links Log", $log, "Updating run log with run statistics #IABot" );
     return;
 }
 //Construct string
@@ -640,14 +738,115 @@ function getLinkDetails( $linkString, $remainder, &$history, $ARCHIVE_TAGS, $CIT
 }
 //Look for the time the link was added.
 function getTimeAdded( $url, &$history, $page ) {
-    if( empty( $history ) ) $history = getPageHistory( $page, 10000 );
+    
+    //Return current time for an empty input.
     if( empty( $url ) ) return time();
+    
+    //Use the database to execute the search if available
+    if( USEWIKIDB === true && ($db = mysqli_connect( WIKIHOST, WIKIUSER, WIKIPASS, WIKIDB, WIKIPORT )) ) {
+        $res = mysqli_query( $db, "SELECT ".REVISIONTABLE.".rev_timestamp FROM ".REVISIONTABLE." JOIN ".TEXTTABLE." ON ".REVISIONTABLE.".rev_id = ".TEXTTABLE.".old_id WHERE CONTAINS(".TEXTTABLE.".old_id, '".mysqli_escape_string( $db, $url )."') ORDER BY ".REVISIONTABLE.".rev_timestamp ASC LIMIT 0,1;" );       
+        //$res = mysqli_query( $db, "SELECT ".REVISIONTABLE.".rev_timestamp FROM ".REVISIONTABLE." JOIN ".TEXTTABLE." ON ".REVISIONTABLE.".rev_id = ".TEXTTABLE.".old_id WHERE ".TEXTTABLE.".old_id LIKE '%".mysqli_escape_string( $db, $url )."%') ORDER BY ".REVISIONTABLE.".rev_timestamp ASC LIMIT 0,1;" );
+        $tmp = mysqli_fetch_assoc( $res );
+        mysqli_free_result( $res );
+        unset( $res );
+        if( $tmp !== false ) {
+            mysqli_close( $db );
+            unset( $db );
+            return strtotime( $tmp['rev_timestamp'] );
+        }
+    }
+    if( isset( $db ) ) {
+        mysqli_close( $db );
+        unset( $db );
+        echo "ERROR: Wiki database usage failed.  Defaulting to API Binary search...\n";
+    }
+    
+    //Do a binary search
+    if( empty( $history ) ) $history = getPageHistory( $page );
+    
+    $range = count( $history );
+    $upper = $range - 1;
+    $lower = 0;
+    $needle = round( $range/2 ) - 1;
     $time = time();
-    foreach( $history as $revision ) {
+    
+    $curl = curl_init();
+    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
+    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
+    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $curl, CURLOPT_HEADER, 1 );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
+    curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+    curl_setopt( $curl, CURLOPT_POST, 0 );
+    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
+    
+    for( $stage = 2; $stage <= 16; $stage++ ) {
+        $get = "action=query&prop=revisions&format=php&rvdir=newer&rvprop=timestamp%7Ccontent&rvlimit=1&rawcontinue=&rvstartid={$history[$needle]['revid']}&rvendid={$history[$needle]['revid']}&titles=".urlencode( $page );
+        curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        $data = curl_exec( $curl ); 
+        $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+        $data2 = trim( substr( $data, $header_size ) );
+        $data = null;
+        $data = unserialize( $data2 );
+        $data2 = null; 
+        if( isset( $data['query']['pages'] ) ) foreach( $data['query']['pages'] as $template ) {
+            if( isset( $template['revisions'] ) ) $revision = $template['revisions'][0];
+            else $revision = false;
+        } else $revision = false;
+        if( $revision === false ) break;
+        else {
+            if( isset( $revision['*'] ) ) {
+                if( strpos( $revision['*'], $url ) === false ) {
+                    $lower = $needle + 1;
+                    $needle += round( $range/(pow( 2, $stage )) );
+                } else {
+                    $upper = $needle;
+                    $needle -= round( $range/(pow( 2, $stage )) );
+                }   
+            } else break;
+        }
+        //If we narrowed it to a sufficiently low amount or if the needle isn't changing, why continue?
+        if( $upper - $lower <= 5 || $needle == $upper || ($needle + 1) == $lower ) break;
+    }
+    
+    $get = "action=query&prop=revisions&format=php&rvdir=newer&rvprop=timestamp%7Ccontent&rvlimit=max&rawcontinue=&rvstartid={$history[$lower]['revid']}&rvendid={$history[$upper]['revid']}&titles=".urlencode( $page );
+    curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+    $data = curl_exec( $curl ); 
+    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
+    $data2 = trim( substr( $data, $header_size ) );
+    $data = null;
+    $data = unserialize( $data2 );
+    $data2 = null; 
+    curl_close( $curl );  
+    unset( $curl, $data2 );
+    
+    if( isset( $data['query']['pages'] ) ) foreach( $data['query']['pages'] as $template ) {
+        if( isset( $template['revisions'] ) ) $revisions = $template['revisions'];
+        else {
+            $revisions = null;
+            unset( $revisions );
+            return $time;   
+        }
+    } else {
+        $revisions = null;
+        unset( $revisions );
+        return $time;   
+    }
+    
+    foreach( $revisions as $revision ) {
         $time = strtotime( $revision['timestamp'] ); 
         if( !isset( $revision['*'] ) ) continue;
         if( strpos( $revision['*'], $url ) !== false ) break;  
     }
+    $revision = $revisions = null;
+    unset( $revisions, $revision );
     return $time;
 }
 
@@ -878,6 +1077,7 @@ function http_parse_headers( $header ) {
 }
 
 function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN ) {
+    if( DEBUG === false || LIMITEDRUN === true ) file_put_contents( IAPROGRESS.WIKIPEDIA, serialize( array( 'title' => $page, 'id' => $pageid ) ) );
     if( WORKERS === false ) echo "Analyzing {$page} ({$pageid})...\n";
     $modifiedLinks = array();
     $archiveProblems = array();
@@ -895,6 +1095,11 @@ function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVE
     else $links = getReferences( $oldtext, $history, $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $TOUCH_ARCHIVE, $VERIFY_DEAD, $page );
     $analyzed = $links['count'];
     unset( $links['count'] );
+    
+    //Check if we already have the link in the database
+    /*if( $db = mysqli_connect( HOST, USER, PASS, DB, PORT ) ) {
+        
+    }   */
                                    
     //Process the links
     $checkResponse = $archiveResponse = $fetchResponse = $toArchive = $toFetch = array();
@@ -1064,12 +1269,12 @@ function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVE
             $out .= "* $problem with error {$errors[$id]}\n";
         } 
         $body = str_replace( "{problematiclinks}", $out, str_replace( "\\n", "\n", $TALK_ERROR_MESSAGE ) )."~~~~";
-        edit( "Talk:$page", $body, "Notifications of sources failing to archive.", $timestamp, true, "new", $TALK_ERROR_MESSAGE_HEADER );  
+        edit( "Talk:$page", $body, "Notifications of sources failing to archive. #IABot", $timestamp, true, "new", $TALK_ERROR_MESSAGE_HEADER );  
     }
     $pageModified = false;
     if( $oldtext != $newtext ) {
         $pageModified = true;
-        $revid = edit( $page, $newtext, "Rescuing $rescued sources, flagging $tagged as dead, and archiving $archived sources.", false, $timestamp );
+        $revid = edit( $page, $newtext, "Rescuing $rescued sources, flagging $tagged as dead, and archiving $archived sources. #IABot", false, $timestamp );
         if( $NOTIFY_ON_TALK == 1 && $revid !== false ) {
             $out = "";
             foreach( $modifiedLinks as $link ) {
@@ -1099,7 +1304,7 @@ function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVE
             }
             $header = str_replace( "{namespacepage}", $page, str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, $TALK_MESSAGE_HEADER ) ) ) );
             $body = str_replace( "{diff}", "https://en.wikipedia.org/w/index.php?diff=prev&oldid=$revid", str_replace( "{modifiedlinks}", $out, str_replace( "{namespacepage}", $page, str_replace( "{linksmodified}", $tagged+$rescued, str_replace( "{linksrescued}", $rescued, str_replace( "{linkstagged}", $tagged, str_replace( "\\n", "\n", $TALK_MESSAGE ) ) ) ) ) ) )."~~~~";
-            edit( "Talk:$page", $body, "Notification of altered sources needing review", false, $timestamp, true, "new", $header );
+            edit( "Talk:$page", $body, "Notification of altered sources needing review #IABot", false, $timestamp, true, "new", $header );
         }
     }
     $oldtext = $newtext = $history = null;
@@ -1253,7 +1458,7 @@ function getTaggedArticles( $titles, $limit, $resume ) {
     return array( $returnArray, $resume);
 }
 
-function getPageHistory( $page, $limit ) {
+function getPageHistory( $page ) {
     $returnArray = array();
     $resume = "";
     $curl = curl_init();
@@ -1273,7 +1478,7 @@ function getPageHistory( $page, $limit ) {
     curl_setopt( $curl, CURLOPT_POST, 0 );
     curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );    
     while( true ) {
-        $get = "action=query&prop=revisions&format=php&rvprop=timestamp%7Ccontent&rvlimit=".($limit-count($returnArray)).( empty($resume) ? "" : "&rvcontinue=$resume" )."&rawcontinue=&titles=".urlencode($page);
+        $get = "action=query&prop=revisions&format=php&rvdir=newer&rvprop=ids&rvlimit=max".( empty($resume) ? "" : "&rvcontinue=$resume" )."&rawcontinue=&titles=".urlencode($page);
         curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
         $data = curl_exec( $curl ); 
         $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
@@ -1291,7 +1496,6 @@ function getPageHistory( $page, $limit ) {
         } 
         $data = null;
         unset($data);
-        if( $limit <= count( $returnArray ) ) break; 
     }
     curl_close( $curl );
     $data = $data2 = $curl = null;
@@ -1402,6 +1606,41 @@ function edit( $page, $text, $summary, $minor = false, $timestamp = false, $bot 
     }
 }
 
+//SQL related stuff
+function createELTable() {
+    if( ( $db = mysqli_connect( HOST, USER, PASS, DB, PORT ) ) !== false ) {
+        if( mysqli_query( "CREATE TABLE `externallinks_".WIKIPEDIA."` (
+                              `pageid` INT(12) NOT NULL,
+                              `url` VARCHAR(767) NOT NULL,
+                              `archive_url` BLOB NULL,
+                              `has_archive` INT(1) UNSIGNED NOT NULL DEFAULT '0',
+                              `live_state` INT(4) UNSIGNED NOT NULL DEFAULT 4,
+                              `archivable` INT(1) UNSIGNED NOT NULL DEFAULT 1,
+                              `archived` INT(1) UNSIGNED NOT NULL DEFAULT 0,
+                              `archive_failure` BLOB NULL,
+                              `access_date` INT(10) UNSIGNED NOT NULL,
+                              `archive_date` INT(10) UNSIGNED NULL,
+                              `reviewed` INT(1) UNSIGNED NOT NULL DEFAULT 0,
+                              UNIQUE INDEX `url_UNIQUE` (`url` ASC),
+                              PRIMARY KEY (`url`, `pageid`, `live_state`, `archived`, `reviewed`, `archivable`),
+                              INDEX `LIVE_STATE` (`live_state` ASC),
+                              INDEX `REVIEWED` (`reviewed` ASC),
+                              INDEX `ARCHIVED` (`archived` ASC, `archivable` ASC),
+                              INDEX `URL` (`url` ASC),
+                              INDEX `PAGEID` (`pageid` ASC));
+                              ") ) echo "Successfully created an external links table for ".WIKIPEDIA."\n\n";
+        else {
+            echo "Failed to create an externallinks table to use.\nThis table is vital for the operation of this bot. Exiting...";
+            exit( 10000 );
+        }  
+    } else {
+        echo "Failed to establish a database connection.  Exiting...";
+        exit( 20000 );
+    }
+    mysqli_close( $db );
+    unset( $db );
+}
+
 function getAllArticles( $limit, $resume ) {
     $returnArray = array();
     $curl = curl_init();
@@ -1477,11 +1716,11 @@ class AsyncFunctionCall extends Thread {
 // Analyze multiple pages simultaneously and edit them.
 class ThreadedBot extends Collectable {
     
-    protected $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN;
+    protected $id, $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN;
     
     public $result;
     
-    public function __construct($page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN) {
+    public function __construct($page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $VERIFY_DEAD, $LINK_SCAN, $i) {
         $this->page = $page;
         $this->pageid = $pageid;
         $this->alreadyArchived = $alreadyArchived;
@@ -1501,11 +1740,14 @@ class ThreadedBot extends Collectable {
         $this->IGNORE_TAGS = $IGNORE_TAGS;
         $this->ARCHIVE_TAGS = $ARCHIVE_TAGS;
         $this->VERIFY_DEAD = $VERIFY_DEAD;
-        $this->LINK_SCAN = $LINK_SCAN;    
+        $this->LINK_SCAN = $LINK_SCAN; 
+        $this->id = $i;   
     }
     
     public function run() {
         $this->result = analyzePage( $this->page, $this->pageid, $this->alreadyArchived, $this->ARCHIVE_ALIVE, $this->TAG_OVERRIDE, $this->ARCHIVE_BY_ACCESSDATE, $this->TOUCH_ARCHIVE, $this->DEAD_ONLY, $this->NOTIFY_ERROR_ON_TALK, $this->NOTIFY_ON_TALK, $this->TALK_MESSAGE_HEADER, $this->TALK_MESSAGE, $this->TALK_ERROR_MESSAGE_HEADER, $this->TALK_ERROR_MESSAGE, $this->DEADLINK_TAGS, $this->CITATION_TAGS, $this->IGNORE_TAGS, $this->ARCHIVE_TAGS, $this->VERIFY_DEAD, $this->LINK_SCAN);
+        if( !file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) ) mkdir( IAPROGRESS.WIKIPEDIA."workers", 0777 );
+        file_put_contents( IAPROGRESS.WIKIPEDIA."workers/worker{$this->id}", serialize( $this->result ) );
         $this->setGarbage();
         $this->page = null;
         $this->pageid = null;
