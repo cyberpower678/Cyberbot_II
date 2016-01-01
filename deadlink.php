@@ -206,7 +206,7 @@ while( true ) {
                 $alreadyArchived = array_merge( $stats['newlyArchived'], $alreadyArchived );
                 $failedToArchive = array_merge( $failedToArchive, $stats['archiveProblems'] );
                 $allerrors = array_merge( $allerrors, $stats['errors'] );
-                if( DEBUG === false || LIMITEDRUN === true ) file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed ) ) );
+                if( DEBUG === false || LIMITEDRUN === true ) file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed, 'runstart' => $runstart ) ) );
                 file_put_contents( DLAA, serialize( $alreadyArchived ) );
                 if( LIMITEDRUN === true && is_int( $debugStyle ) && $debugStyle === $runpagecount ) break;
             }
@@ -1124,7 +1124,7 @@ function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVE
         }
     }
     $errors = array();
-    if( MULTITHREAD === true ) {
+    if( MULTITHREAD === true && DEBUG === false ) {
         if( !empty( $toArchive ) ) if( ($archiveResponse = AsyncFunctionCall::call( "requestArchive", array( $toArchive, $alreadyArchived ) )) === false ) {
             echo "Threaded function call, requestArchive, failed, running non-threaded function call...\n";
         }
@@ -1614,7 +1614,7 @@ function createELTable() {
                               `url` VARCHAR(767) NOT NULL,
                               `archive_url` BLOB NULL,
                               `has_archive` INT(1) UNSIGNED NOT NULL DEFAULT '0',
-                              `live_state` INT(4) UNSIGNED NOT NULL DEFAULT 4,
+                              `live_state` INT(1) UNSIGNED NOT NULL DEFAULT 4,
                               `archivable` INT(1) UNSIGNED NOT NULL DEFAULT 1,
                               `archived` INT(1) UNSIGNED NOT NULL DEFAULT 0,
                               `archive_failure` BLOB NULL,
