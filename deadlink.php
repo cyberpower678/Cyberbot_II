@@ -12,12 +12,6 @@ require_once( 'deadlink.config.inc.php' );
 
 botLogon( USERNAME, $password );
 
-if( isset( $argv[1] ) ) $isWorker = true;
-else $isWorker = false;
-$workerID = null;
-if( isset( $argv[1] ) ) $workerID = $argv[1];
-$pgDisplayPechoNormal = false;
-$pgVerbose = array( 2,3,4 );
 $LINK_SCAN = 0;
 $DEAD_ONLY = 2;
 $TAG_OVERRIDE = 1;
@@ -85,9 +79,6 @@ while( true ) {
     }
     $failedToArchive = array();
     $allerrors = array();
-    if( isset( $argv[2] ) && !empty( $argv[2] ) ) {
-        $return = $argv[2];
-    } else $return = "";
     $iteration = 0;
     //$config = $site->initPage( "User:Cyberbot II/Dead-links" )->get_text( true );
     $config = getPageText( "User:Cyberbot II/Dead-links" );
@@ -139,7 +130,6 @@ while( true ) {
         if( $iteration !== 1 ) {
             $lastpage = false;
             $pages = false;
-            $return = "";
         }
         //fetch the pages we want to analyze and edit.  This fetching process is done in batches to preserve memory. 
         if( DEBUG === true && $debugStyle == "test" ) {     //This fetches a specific page for debugging purposes
@@ -211,7 +201,7 @@ while( true ) {
                 if( LIMITEDRUN === true && is_int( $debugStyle ) && $debugStyle === $runpagecount ) break;
             }
         } else {   
-            if( $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) && ($handle = opendir( IAPROGRESS.WIKIPEDIA."workers" )) ) {
                  while( false !== ( $entry = readdir( $handle ) ) ) {
                     if( $entry == "." || $entry == ".." ) continue;
                     $tmp = unserialize( file_get_contents( IAPROGRESS.WIKIPEDIA."workers/$entry" ) );
@@ -232,7 +222,7 @@ while( true ) {
                 unset( $tmp ); 
                 file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed, 'runstart' => $runstart ) ) ); 
             }
-            closedir( $handle );
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) ) closedir( $handle );
             $workerQueue = new Pool( $workerLimit );
             foreach( $pages as $tid => $tpage ) {
                 $pagesAnalyzed++;
@@ -258,13 +248,13 @@ while( true ) {
                 unset( $stats );
                 return $thread->isGarbage();
             });
-            if( $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) &&  $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
                  while( false !== ( $entry = readdir( $handle ) ) ) {
                     if( $entry == "." || $entry == ".." ) continue;
                     unlink( IAPROGRESS.WIKIPEDIA."workers/$entry" ); 
                 }
             }
-            closedir( $handle );
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) ) closedir( $handle );
             echo "STATUS REPORT:\nLinks analyzed so far: $linksAnalyzed\nLinks archived so far: $linksArchived\nLinks fixed so far: $linksFixed\nLinks tagged so far: $linksTagged\n\n";
             file_put_contents( DLAA, serialize( $alreadyArchived ) );
             file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed, 'runstart' => $runstart ) ) );
