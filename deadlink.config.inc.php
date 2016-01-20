@@ -94,6 +94,6 @@
     define( 'CONSUMERSECRET', $consumerSecret );
     define( 'ACCESSTOKEN', $accessToken );
     define( 'ACCESSSECRET', $accessSecret );
-    $oauthURL = $accessSecret = $accessToken = $consumerSecret = $consumerKey = $db = $user = $pass = $port = $host = $texttable = $revisiontable = $wikidb = $wikiuser = $wikipass = $wikiport = $wikihost = $useWikiDB = $limitedRun = $debug = $workers = $multithread = $runpage = $memoryFile = $dlaaLocation = $taskname = $username = $nobots = $apiURL = $userAgent = null;
-    unset( $oauthURL, $accessSecret, $accessToken, $consumerSecret, $consumerKey, $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $dlaaLocation, $taskname, $username, $nobots, $apiURL, $userAgent );
+    $dlaa = $oauthURL = $accessSecret = $accessToken = $consumerSecret = $consumerKey = $db = $user = $pass = $port = $host = $texttable = $revisiontable = $wikidb = $wikiuser = $wikipass = $wikiport = $wikihost = $useWikiDB = $limitedRun = $debug = $workers = $multithread = $runpage = $memoryFile = $dlaaLocation = $taskname = $username = $nobots = $apiURL = $userAgent = null;
+    unset( $dlaa, $oauthURL, $accessSecret, $accessToken, $consumerSecret, $consumerKey, $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $dlaaLocation, $taskname, $username, $nobots, $apiURL, $userAgent );
 ?>
