@@ -32,8 +32,12 @@
     switch( WIKIPEDIA ) {
         default:
         $apiURL = "https://en.wikipedia.org/w/api.php";
+        $oauthURL = "https://en.wikipedia.org/w/index.php?title=Special:OAuth";
+        $consumerKey = "";
+        $consumerSecret = "";
+        $accessToken = "";
+        $accessSecret = "";
         $username = "";
-        $password = "";
         $runpage = "";
         $taskname = "";
         $nobots = false;
@@ -62,6 +66,7 @@
     define( 'USERAGENT', $userAgent );
     define( 'COOKIE', $username.WIKIPEDIA.$taskname );
     define( 'API', $apiURL );
+    define( 'OAUTH', $oauthURL );
     define( 'NOBOTS', $nobots );
     define( 'USERNAME', $username );
     define( 'TASKNAME', $taskname );
@@ -85,6 +90,10 @@
     define( 'USER', $user );
     define( 'PASS', $pass );
     define( 'DB', $db );
-    $db = $user = $pass = $port = $host = $texttable = $revisiontable = $wikidb = $wikiuser = $wikipass = $wikiport = $wikihost = $useWikiDB = $limitedRun = $debug = $workers = $multithread = $runpage = $memoryFile = $dlaaLocation = $taskname = $username = $nobots = $apiURL = $userAgent = null;
-    unset( $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $dlaaLocation, $taskname, $username, $nobots, $apiURL, $userAgent );
+    define( 'CONSUMERKEY', $consumerKey );
+    define( 'CONSUMERSECRET', $consumerSecret );
+    define( 'ACCESSTOKEN', $accessToken );
+    define( 'ACCESSSECRET', $accessSecret );
+    $oauthURL = $accessSecret = $accessToken = $consumerSecret = $consumerKey = $db = $user = $pass = $port = $host = $texttable = $revisiontable = $wikidb = $wikiuser = $wikipass = $wikiport = $wikihost = $useWikiDB = $limitedRun = $debug = $workers = $multithread = $runpage = $memoryFile = $dlaaLocation = $taskname = $username = $nobots = $apiURL = $userAgent = null;
+    unset( $oauthURL, $accessSecret, $accessToken, $consumerSecret, $consumerKey, $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $dlaaLocation, $taskname, $username, $nobots, $apiURL, $userAgent );
 ?>

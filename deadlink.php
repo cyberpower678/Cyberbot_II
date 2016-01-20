@@ -10,14 +10,8 @@ ini_set('memory_limit','1G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once( 'deadlink.config.inc.php' );
 
-botLogon( USERNAME, $password );
+botLogon( USERNAME );
 
-if( isset( $argv[1] ) ) $isWorker = true;
-else $isWorker = false;
-$workerID = null;
-if( isset( $argv[1] ) ) $workerID = $argv[1];
-$pgDisplayPechoNormal = false;
-$pgVerbose = array( 2,3,4 );
 $LINK_SCAN = 0;
 $DEAD_ONLY = 2;
 $TAG_OVERRIDE = 1;
@@ -85,9 +79,6 @@ while( true ) {
     }
     $failedToArchive = array();
     $allerrors = array();
-    if( isset( $argv[2] ) && !empty( $argv[2] ) ) {
-        $return = $argv[2];
-    } else $return = "";
     $iteration = 0;
     //$config = $site->initPage( "User:Cyberbot II/Dead-links" )->get_text( true );
     $config = getPageText( "User:Cyberbot II/Dead-links" );
@@ -139,7 +130,6 @@ while( true ) {
         if( $iteration !== 1 ) {
             $lastpage = false;
             $pages = false;
-            $return = "";
         }
         //fetch the pages we want to analyze and edit.  This fetching process is done in batches to preserve memory. 
         if( DEBUG === true && $debugStyle == "test" ) {     //This fetches a specific page for debugging purposes
@@ -211,7 +201,7 @@ while( true ) {
                 if( LIMITEDRUN === true && is_int( $debugStyle ) && $debugStyle === $runpagecount ) break;
             }
         } else {   
-            if( $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) && ($handle = opendir( IAPROGRESS.WIKIPEDIA."workers" )) ) {
                  while( false !== ( $entry = readdir( $handle ) ) ) {
                     if( $entry == "." || $entry == ".." ) continue;
                     $tmp = unserialize( file_get_contents( IAPROGRESS.WIKIPEDIA."workers/$entry" ) );
@@ -232,7 +222,7 @@ while( true ) {
                 unset( $tmp ); 
                 file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed, 'runstart' => $runstart ) ) ); 
             }
-            closedir( $handle );
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) ) closedir( $handle );
             $workerQueue = new Pool( $workerLimit );
             foreach( $pages as $tid => $tpage ) {
                 $pagesAnalyzed++;
@@ -258,13 +248,13 @@ while( true ) {
                 unset( $stats );
                 return $thread->isGarbage();
             });
-            if( $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) &&  $handle = opendir( IAPROGRESS.WIKIPEDIA."workers" ) ) {
                  while( false !== ( $entry = readdir( $handle ) ) ) {
                     if( $entry == "." || $entry == ".." ) continue;
                     unlink( IAPROGRESS.WIKIPEDIA."workers/$entry" ); 
                 }
             }
-            closedir( $handle );
+            if( file_exists( IAPROGRESS.WIKIPEDIA."workers/" ) ) closedir( $handle );
             echo "STATUS REPORT:\nLinks analyzed so far: $linksAnalyzed\nLinks archived so far: $linksArchived\nLinks fixed so far: $linksFixed\nLinks tagged so far: $linksTagged\n\n";
             file_put_contents( DLAA, serialize( $alreadyArchived ) );
             file_put_contents( IAPROGRESS.WIKIPEDIA."stats", serialize( array( 'linksAnalyzed' => $linksAnalyzed, 'linksArchived' => $linksArchived, 'linksFixed' => $linksFixed, 'linksTagged' => $linksTagged, 'pagesModified' => $pagesModified, 'pagesAnalyzed' => $pagesAnalyzed, 'runstart' => $runstart ) ) );
@@ -789,7 +779,28 @@ function getTimeAdded( $url, &$history, $page ) {
     
     for( $stage = 2; $stage <= 16; $stage++ ) {
         $get = "action=query&prop=revisions&format=php&rvdir=newer&rvprop=timestamp%7Ccontent&rvlimit=1&rawcontinue=&rvstartid={$history[$needle]['revid']}&rvendid={$history[$needle]['revid']}&titles=".urlencode( $page );
-        curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        curl_setopt( $curl, CURLOPT_URL, API."?$get" );
+        $headerArr = array(
+		            // OAuth information
+				            'oauth_consumer_key' => CONSUMERKEY,
+				            'oauth_token' => ACCESSTOKEN,
+				            'oauth_version' => '1.0',
+				            'oauth_nonce' => md5( microtime() . mt_rand() ),
+				            'oauth_timestamp' => time(),
+
+				            // We're using secret key signatures here.
+				            'oauth_signature_method' => 'HMAC-SHA1',
+				        );
+		$signature = generateSignature( 'GET', API."?$get", $headerArr  );
+		$headerArr['oauth_signature'] = $signature; 
+
+		$header = array();
+		foreach ( $headerArr as $k => $v ) {
+			$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+		}
+		$header = 'Authorization: OAuth ' . join( ', ', $header );
+		unset( $headerArr ); 
+		curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) ); 
         $data = curl_exec( $curl ); 
         $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
         $data2 = trim( substr( $data, $header_size ) );
@@ -817,7 +828,28 @@ function getTimeAdded( $url, &$history, $page ) {
     }
     
     $get = "action=query&prop=revisions&format=php&rvdir=newer&rvprop=timestamp%7Ccontent&rvlimit=max&rawcontinue=&rvstartid={$history[$lower]['revid']}&rvendid={$history[$upper]['revid']}&titles=".urlencode( $page );
-    curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+    curl_setopt( $curl, CURLOPT_URL, API."?$get" );
+    $headerArr = array(
+	            // OAuth information
+			            'oauth_consumer_key' => CONSUMERKEY,
+			            'oauth_token' => ACCESSTOKEN,
+			            'oauth_version' => '1.0',
+			            'oauth_nonce' => md5( microtime() . mt_rand() ),
+			            'oauth_timestamp' => time(),
+
+			            // We're using secret key signatures here.
+			            'oauth_signature_method' => 'HMAC-SHA1',
+			        );
+	$signature = generateSignature( 'GET', API."?$get", $headerArr  );
+	$headerArr['oauth_signature'] = $signature; 
+
+	$header = array();
+	foreach ( $headerArr as $k => $v ) {
+		$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+	}
+	$header = 'Authorization: OAuth ' . join( ', ', $header );
+	unset( $headerArr ); 
+	curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) ); 
     $data = curl_exec( $curl ); 
     $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
     $data2 = trim( substr( $data, $header_size ) );
@@ -1314,48 +1346,132 @@ function analyzePage( $page, $pageid, $alreadyArchived, $ARCHIVE_ALIVE, $TAG_OVE
 }
 
 //Multithread safe API functions
-function botLogon( $user, $pass ) {
-    echo "Logging on as $user...";
-    $curl = curl_init();
-    curl_setopt($curl,CURLOPT_COOKIEFILE, COOKIE);
-    curl_setopt($curl,CURLOPT_COOKIEJAR, COOKIE);
-    $post = array( 'action'=>'login', 'lgname'=>$user, 'lgpassword'=>$pass, 'format'=>'php' );
-    curl_setopt( $curl, CURLOPT_USERAGENT, USERAGENT );
-    curl_setopt( $curl, CURLOPT_MAXCONNECTS, 100 );
-    curl_setopt( $curl, CURLOPT_CLOSEPOLICY, CURLCLOSEPOLICY_LEAST_RECENTLY_USED );
-    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
-    curl_setopt( $curl, CURLOPT_ENCODING, 'gzip' );
-    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, 1 );
-    curl_setopt( $curl, CURLOPT_HEADER, 1 );
-    curl_setopt( $curl, CURLOPT_TIMEOUT, 100 );
-    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, 10 );
-    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, 0 );
-    curl_setopt( $curl, CURLOPT_HTTPGET, 0 );
-    curl_setopt( $curl, CURLOPT_POST, 1 );
-    curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
-    curl_setopt( $curl, CURLOPT_POSTFIELDS, $post );
-    curl_setopt( $curl, CURLOPT_URL, API ); 
-    $data = curl_exec( $curl ); 
-    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
-    $data = trim( substr( $data, $header_size ) );
-    $data = unserialize( $data );
-    $post['lgtoken'] = $data['login']['token'];
-    curl_setopt( $curl, CURLOPT_POSTFIELDS, $post );
-    $data = curl_exec( $curl ); 
-    $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
-    $data = trim( substr( $data, $header_size ) );
-    $data = unserialize( $data );
-    curl_close( $curl );
-    $curl = null;
-    unset( $curl );
-    if( $data['login']['result'] == "Success" ) {
+function botLogon( $user ) {
+	echo "Logging on as $user..."; 
+	
+	$error = "";
+	$url = OAUTH . '/identify';
+
+    $headerArr = array(
+                        // OAuth information
+                        'oauth_consumer_key' => CONSUMERKEY,
+                        'oauth_token' => ACCESSTOKEN,
+                        'oauth_version' => '1.0',
+                        'oauth_nonce' => md5( microtime() . mt_rand() ),
+                        'oauth_timestamp' => time(),
+
+                        // We're using secret key signatures here.
+                        'oauth_signature_method' => 'HMAC-SHA1',
+                    );
+    $signature = generateSignature( 'GET', $url, $headerArr );
+    $headerArr['oauth_signature'] = $signature;
+
+    $header = array();
+    foreach ( $headerArr as $k => $v ) {
+        $header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+    }
+    $header = 'Authorization: OAuth ' . join( ', ', $header );
+
+    $ch = curl_init();
+    curl_setopt( $ch, CURLOPT_URL, $url );
+    curl_setopt( $ch, CURLOPT_HTTPHEADER, array( $header ) );
+    curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
+    curl_setopt( $ch, CURLOPT_USERAGENT, USERAGENT );
+    curl_setopt( $ch, CURLOPT_HEADER, 0 );
+    curl_setopt( $ch, CURLOPT_RETURNTRANSFER, 1 );
+    curl_setopt( $ch, CURLOPT_COOKIEFILE, COOKIE);
+    curl_setopt( $ch, CURLOPT_COOKIEJAR, COOKIE);
+    $data = curl_exec( $ch );
+    curl_close( $ch );
+    if ( !$data ) {
+        $error = 'Curl error: ' . htmlspecialchars( curl_error( $ch ) );
+    }
+    $err = json_decode( $data );
+    if ( is_object( $err ) && isset( $err->error ) && $err->error === 'mwoauthdatastore-access-token-not-found' ) {
+        // We're not authorized!
+        $error = "Missing authorization or authorization failed";
+    }
+
+    // There are three fields in the response
+    $fields = explode( '.', $data );
+    if ( count( $fields ) !== 3 ) {
+        $error = 'Invalid identify response: ' . htmlspecialchars( $data );
+    }
+
+    // Validate the header. MWOAuth always returns alg "HS256".
+    $header = base64_decode( strtr( $fields[0], '-_', '+/' ), true );
+    if ( $header !== false ) {
+        $header = json_decode( $header );
+    }
+    if ( !is_object( $header ) || $header->typ !== 'JWT' || $header->alg !== 'HS256' ) {
+        $error = 'Invalid header in identify response: ' . htmlspecialchars( $data );
+    }
+
+    // Verify the signature
+    $sig = base64_decode( strtr( $fields[2], '-_', '+/' ), true );
+    $check = hash_hmac( 'sha256', $fields[0] . '.' . $fields[1], CONSUMERSECRET, true );
+    if ( $sig !== $check ) {
+        $error = 'JWT signature validation failed: ' . htmlspecialchars( $data );
+    }
+
+    // Decode the payload
+    $payload = base64_decode( strtr( $fields[1], '-_', '+/' ), true );
+    if ( $payload !== false ) {
+        $payload = json_decode( $payload );
+    }
+    if ( !is_object( $payload ) ) {
+        $error = 'Invalid payload in identify response: ' . htmlspecialchars( $data );
+    }
+
+    if( $user == $payload->username ) {
         echo "Success!!\n\n";
         return true;
     }
     else {
-        echo "Failed!!\n\n";
+        echo "Failed!!\n";
+        if( !empty( $error ) ) echo "ERROR: $error\n";
+        else echo "ERROR: The bot logged into the wrong username.\n";
         return false;
     }
+}
+
+function generateSignature( $method, $url, $params = array() ) {
+    $parts = parse_url( $url );
+
+    // We need to normalize the endpoint URL
+    $scheme = isset( $parts['scheme'] ) ? $parts['scheme'] : 'http';
+    $host = isset( $parts['host'] ) ? $parts['host'] : '';
+    $port = isset( $parts['port'] ) ? $parts['port'] : ( $scheme == 'https' ? '443' : '80' );
+    $path = isset( $parts['path'] ) ? $parts['path'] : '';
+    if ( ( $scheme == 'https' && $port != '443' ) ||
+        ( $scheme == 'http' && $port != '80' ) 
+    ) {
+        // Only include the port if it's not the default
+        $host = "$host:$port";
+    }
+
+    // Also the parameters
+    $pairs = array();
+    parse_str( isset( $parts['query'] ) ? $parts['query'] : '', $query );
+    $query += $params;
+    unset( $query['oauth_signature'] );
+    if ( $query ) {
+        $query = array_combine(
+            // rawurlencode follows RFC 3986 since PHP 5.3
+            array_map( 'rawurlencode', array_keys( $query ) ),
+            array_map( 'rawurlencode', array_values( $query ) )
+        );
+        ksort( $query, SORT_STRING );
+        foreach ( $query as $k => $v ) {
+            $pairs[] = "$k=$v";
+        }
+    }
+
+    $toSign = rawurlencode( strtoupper( $method ) ) . '&' .
+        rawurlencode( "$scheme://$host$path" ) . '&' .
+        rawurlencode( join( '&', $pairs ) );
+    $key = rawurlencode( CONSUMERSECRET ) . '&' . rawurlencode( ACCESSSECRET );
+    return base64_encode( hash_hmac( 'sha1', $toSign, $key, true ) );
 }
 
 function isLoggedOn( $user ) {
@@ -1376,7 +1492,28 @@ function isLoggedOn( $user ) {
     curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
     curl_setopt( $curl, CURLOPT_POST, 0 );
     curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
-    curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+    curl_setopt( $curl, CURLOPT_URL, API."?$get" );
+    $headerArr = array(
+	            // OAuth information
+			            'oauth_consumer_key' => CONSUMERKEY,
+			            'oauth_token' => ACCESSTOKEN,
+			            'oauth_version' => '1.0',
+			            'oauth_nonce' => md5( microtime() . mt_rand() ),
+			            'oauth_timestamp' => time(),
+
+			            // We're using secret key signatures here.
+			            'oauth_signature_method' => 'HMAC-SHA1',
+			        );
+	$signature = generateSignature( 'GET', API."?$get", $headerArr  );
+	$headerArr['oauth_signature'] = $signature; 
+
+	$header = array();
+	foreach ( $headerArr as $k => $v ) {
+		$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+	}
+	$header = 'Authorization: OAuth ' . join( ', ', $header );
+	unset( $headerArr ); 
+	curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) );
     $data = curl_exec( $curl ); 
     $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
     $data = trim( substr( $data, $header_size ) );
@@ -1437,7 +1574,28 @@ function getTaggedArticles( $titles, $limit, $resume ) {
     curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );    
     while( true ) {
         $get = "action=query&prop=transcludedin&format=php&tinamespace=0&tilimit=".($limit-count($returnArray)).( empty($resume) ? "" : "&ticontinue=$resume" )."&rawcontinue=&titles=".urlencode($titles);
-        curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        curl_setopt( $curl, CURLOPT_URL, API."?$get" );
+        $headerArr = array(
+		            // OAuth information
+				            'oauth_consumer_key' => CONSUMERKEY,
+				            'oauth_token' => ACCESSTOKEN,
+				            'oauth_version' => '1.0',
+				            'oauth_nonce' => md5( microtime() . mt_rand() ),
+				            'oauth_timestamp' => time(),
+
+				            // We're using secret key signatures here.
+				            'oauth_signature_method' => 'HMAC-SHA1',
+				        );
+		$signature = generateSignature( 'GET', API."?$get", $headerArr  );
+		$headerArr['oauth_signature'] = $signature; 
+
+		$header = array();
+		foreach ( $headerArr as $k => $v ) {
+			$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+		}
+		$header = 'Authorization: OAuth ' . join( ', ', $header );
+		unset( $headerArr ); 
+		curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) ); 
         $data = curl_exec( $curl ); 
         $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
         $data = trim( substr( $data, $header_size ) );
@@ -1479,7 +1637,28 @@ function getPageHistory( $page ) {
     curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );    
     while( true ) {
         $get = "action=query&prop=revisions&format=php&rvdir=newer&rvprop=ids&rvlimit=max".( empty($resume) ? "" : "&rvcontinue=$resume" )."&rawcontinue=&titles=".urlencode($page);
-        curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        curl_setopt( $curl, CURLOPT_URL, API."?$get" );
+        $headerArr = array(
+		            // OAuth information
+				            'oauth_consumer_key' => CONSUMERKEY,
+				            'oauth_token' => ACCESSTOKEN,
+				            'oauth_version' => '1.0',
+				            'oauth_nonce' => md5( microtime() . mt_rand() ),
+				            'oauth_timestamp' => time(),
+
+				            // We're using secret key signatures here.
+				            'oauth_signature_method' => 'HMAC-SHA1',
+				        );
+		$signature = generateSignature( 'GET', API."?$get", $headerArr  );
+		$headerArr['oauth_signature'] = $signature; 
+
+		$header = array();
+		foreach ( $headerArr as $k => $v ) {
+			$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+		}
+		$header = 'Authorization: OAuth ' . join( ', ', $header );
+		unset( $headerArr ); 
+		curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) ); 
         $data = curl_exec( $curl ); 
         $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
         $data2 = trim( substr( $data, $header_size ) );
@@ -1583,6 +1762,27 @@ function edit( $page, $text, $summary, $minor = false, $timestamp = false, $bot 
     curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, false );
     $get = "action=query&meta=tokens&format=php";    
     curl_setopt( $curl, CURLOPT_URL, API."?$get" );
+    $headerArr = array(
+	            // OAuth information
+			            'oauth_consumer_key' => CONSUMERKEY,
+			            'oauth_token' => ACCESSTOKEN,
+			            'oauth_version' => '1.0',
+			            'oauth_nonce' => md5( microtime() . mt_rand() ),
+			            'oauth_timestamp' => time(),
+
+			            // We're using secret key signatures here.
+			            'oauth_signature_method' => 'HMAC-SHA1',
+			        );
+	$signature = generateSignature( 'GET', API."?$get", $headerArr  );
+	$headerArr['oauth_signature'] = $signature; 
+
+	$header = array();
+	foreach ( $headerArr as $k => $v ) {
+		$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+	}
+	$header = 'Authorization: OAuth ' . join( ', ', $header );
+	unset( $headerArr ); 
+	curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) );
     $data = curl_exec( $curl ); 
     $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
     $data = trim( substr( $data, $header_size ) );
@@ -1592,6 +1792,27 @@ function edit( $page, $text, $summary, $minor = false, $timestamp = false, $bot 
     curl_setopt( $curl, CURLOPT_POST, 1 );
     curl_setopt( $curl, CURLOPT_POSTFIELDS, $post );
     curl_setopt( $curl, CURLOPT_URL, API ); 
+    $headerArr = array(
+	            // OAuth information
+			            'oauth_consumer_key' => CONSUMERKEY,
+			            'oauth_token' => ACCESSTOKEN,
+			            'oauth_version' => '1.0',
+			            'oauth_nonce' => md5( microtime() . mt_rand() ),
+			            'oauth_timestamp' => time(),
+
+			            // We're using secret key signatures here.
+			            'oauth_signature_method' => 'HMAC-SHA1',
+			        );
+	$signature = generateSignature( 'POST', API, $headerArr  );
+	$headerArr['oauth_signature'] = $signature; 
+
+	$header = array();
+	foreach ( $headerArr as $k => $v ) {
+		$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+	}
+	$header = 'Authorization: OAuth ' . join( ', ', $header );
+	unset( $headerArr ); 
+	curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) );
     $data = curl_exec( $curl ); 
     $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
     $data = trim( substr( $data, $header_size ) );
@@ -1662,6 +1883,27 @@ function getAllArticles( $limit, $resume ) {
     while( true ) {
         $get = "action=query&list=allpages&format=php&apnamespace=0&apfilterredir=nonredirects&aplimit=".($limit-count($returnArray))."&rawcontinue=&apcontinue=$resume";
         curl_setopt( $curl, CURLOPT_URL, API."?$get" ); 
+        $headerArr = array(
+		            // OAuth information
+				            'oauth_consumer_key' => CONSUMERKEY,
+				            'oauth_token' => ACCESSTOKEN,
+				            'oauth_version' => '1.0',
+				            'oauth_nonce' => md5( microtime() . mt_rand() ),
+				            'oauth_timestamp' => time(),
+
+				            // We're using secret key signatures here.
+				            'oauth_signature_method' => 'HMAC-SHA1',
+				        );
+		$signature = generateSignature( 'GET', API."?$get", $headerArr  );
+		$headerArr['oauth_signature'] = $signature; 
+
+		$header = array();
+		foreach ( $headerArr as $k => $v ) {
+			$header[] = rawurlencode( $k ) . '="' . rawurlencode( $v ) . '"';
+		}
+		$header = 'Authorization: OAuth ' . join( ', ', $header );
+		unset( $headerArr ); 
+		curl_setopt( $curl, CURLOPT_HTTPHEADER, array( $header ) );
         $data = curl_exec( $curl ); 
         $header_size = curl_getinfo( $curl, CURLINFO_HEADER_SIZE );
         $data = trim( substr( $data, $header_size ) );
