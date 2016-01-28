@@ -19,7 +19,11 @@ class checkIfDead {
 
 		$httpCode = $headers['http_code'];
 		if ( $httpCode >= 400 && $httpCode < 600 ) {
-			return true;
+			if ( $httpCode == 401 || $httpCode == 503 || $httpCode == 507 ) {
+				return false;
+			} else {
+				return true;
+			}
 		} else {
 			return false;
 		}
