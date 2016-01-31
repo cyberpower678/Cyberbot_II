@@ -10,9 +10,6 @@
     //Set the bot's UA
     $userAgent = '';
 
-    //Location of memory files to be saved
-    $dlaaLocation = "";
-
     //Multithread settings.  Use this to speed up the bot's performance.  Do not use more than 50 workers.
     //This increases network bandwidth.  The programs speed will be limited by the CPU, or the bandwidth, whichever one is slower.
     $multithread = false;
@@ -20,12 +17,12 @@
     $workerLimit = 3;
     $useQueuedArchiving = false;
     $useQueuedVerification = false;
+    $useQueuedEditing = false;
     
     //Set Wiki to run on, define this before this gets called, to run on a different wiki.
     if( !defined( 'WIKIPEDIA' ) ) define( 'WIKIPEDIA', "enwiki" );
     
     //Progress memory file.  This allows the bot to resume where it left off in the event of a shutdown or a crash.
-    //Leave blank or false for no memory storage
     $memoryFile = "";
     
     //Wiki connection setup.  Uses the defined constant WIKIPEDIA.
@@ -62,6 +59,19 @@
     $texttable = "";
     
     //Don't copy any of this below.
+    require_once( 'API.php' );
+	require_once( 'thread.php' );
+	require_once( 'Parser/parse.php' );
+	require_once( 'DB.php' );
+	require_once( 'checkIfDead.php');
+	if( file_exists( 'Parser/'.WIKIPEDIA.'.php' ) ) {
+		require_once( 'Parser/'.WIKIPEDIA.'.php' );
+		define( 'PARSERCLASS', WIKIPEDIA.'Parser' );
+	} else {
+		define( 'PARSERCLASS', 'Parser' );
+		echo "ERROR: Unable to load local wiki parsing library.\nTerminating application...";
+		exit( 40000 );
+	}
     if( file_exists( 'deadlink.config.local.inc.php' ) ) require_once( 'deadlink.config.local.inc.php' );
     define( 'USERAGENT', $userAgent );
     define( 'COOKIE', $username.WIKIPEDIA.$taskname );
@@ -70,7 +80,6 @@
     define( 'NOBOTS', $nobots );
     define( 'USERNAME', $username );
     define( 'TASKNAME', $taskname );
-    define( 'DLAA', $dlaaLocation );
     define( 'IAPROGRESS', $memoryFile );
     define( 'RUNPAGE', $runpage );
     define( 'MULTITHREAD', $multithread );
@@ -94,6 +103,5 @@
     define( 'CONSUMERSECRET', $consumerSecret );
     define( 'ACCESSTOKEN', $accessToken );
     define( 'ACCESSSECRET', $accessSecret );
-    $dlaa = $oauthURL = $accessSecret = $accessToken = $consumerSecret = $consumerKey = $db = $user = $pass = $port = $host = $texttable = $revisiontable = $wikidb = $wikiuser = $wikipass = $wikiport = $wikihost = $useWikiDB = $limitedRun = $debug = $workers = $multithread = $runpage = $memoryFile = $dlaaLocation = $taskname = $username = $nobots = $apiURL = $userAgent = null;
-    unset( $dlaa, $oauthURL, $accessSecret, $accessToken, $consumerSecret, $consumerKey, $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $dlaaLocation, $taskname, $username, $nobots, $apiURL, $userAgent );
+    unset( $oauthURL, $accessSecret, $accessToken, $consumerSecret, $consumerKey, $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $taskname, $username, $nobots, $apiURL, $userAgent );
 ?>
