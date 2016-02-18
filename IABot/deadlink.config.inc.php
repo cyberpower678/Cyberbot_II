@@ -1,4 +1,4 @@
-<?php
+<?php 
     //Create a file in the same directory as this on named deadlink.config.local.inc.php and copy the stuff below.
     
     //Activate this to run the bot on a specific page(s) for debugging purposes.
@@ -10,22 +10,16 @@
     //Set the bot's UA
     $userAgent = '';
 
-    //Location of memory files to be saved
-    $dlaaLocation = "";
-
     //Multithread settings.  Use this to speed up the bot's performance.  Do not use more than 50 workers.
     //This increases network bandwidth.  The programs speed will be limited by the CPU, or the bandwidth, whichever one is slower.
     $multithread = false;
     $workers = false;
     $workerLimit = 3;
-    $useQueuedArchiving = false;
-    $useQueuedVerification = false;
     
     //Set Wiki to run on, define this before this gets called, to run on a different wiki.
     if( !defined( 'WIKIPEDIA' ) ) define( 'WIKIPEDIA', "enwiki" );
     
     //Progress memory file.  This allows the bot to resume where it left off in the event of a shutdown or a crash.
-    //Leave blank or false for no memory storage
     $memoryFile = "";
     
     //Wiki connection setup.  Uses the defined constant WIKIPEDIA.
@@ -43,6 +37,11 @@
         $nobots = false;
         break;
     }
+    
+    //IA Error Mailing List
+    $enableMail = false;
+    $to = "";
+    $from = "";
     
     //DB connection setup
     $host = "";
@@ -63,6 +62,29 @@
     
     //Don't copy any of this below.
     if( file_exists( 'deadlink.config.local.inc.php' ) ) require_once( 'deadlink.config.local.inc.php' );
+    require_once( 'API.php' );
+	if( $multithread || $workers ) require_once( 'thread.php' );
+	require_once( 'Parser/parse.php' );
+	require_once( 'DB.php' );
+    require_once( 'Core.php' );
+	require_once( 'checkIfDead.php');
+    require_once( 'Templates/TemplatePointer.php' );
+	if( file_exists( 'Parser/'.WIKIPEDIA.'.php' ) ) {
+		require_once( 'Parser/'.WIKIPEDIA.'.php' );
+		define( 'PARSERCLASS', WIKIPEDIA.'Parser' );
+	} else {
+		define( 'PARSERCLASS', 'Parser' );
+		echo "ERROR: Unable to load local wiki parsing library.\nTerminating application...";
+		exit( 40000 );
+	}
+    if( file_exists( 'Templates/'.WIKIPEDIA.'.php' ) ) {
+        require_once( 'Templates/'.WIKIPEDIA.'.php' );
+        define( 'TEMPLATECLASS', WIKIPEDIA.'TemplatePointer' );
+    } else {
+        define( 'TEMPLATECLASS', 'TemplatePointer' );
+        echo "ERROR: Unable to load local wiki template library.\nTerminating application...";
+        exit( 40000 );
+    }
     define( 'USERAGENT', $userAgent );
     define( 'COOKIE', $username.WIKIPEDIA.$taskname );
     define( 'API', $apiURL );
@@ -70,7 +92,6 @@
     define( 'NOBOTS', $nobots );
     define( 'USERNAME', $username );
     define( 'TASKNAME', $taskname );
-    define( 'DLAA', $dlaaLocation );
     define( 'IAPROGRESS', $memoryFile );
     define( 'RUNPAGE', $runpage );
     define( 'MULTITHREAD', $multithread );
@@ -94,6 +115,8 @@
     define( 'CONSUMERSECRET', $consumerSecret );
     define( 'ACCESSTOKEN', $accessToken );
     define( 'ACCESSSECRET', $accessSecret );
-    $dlaa = $oauthURL = $accessSecret = $accessToken = $consumerSecret = $consumerKey = $db = $user = $pass = $port = $host = $texttable = $revisiontable = $wikidb = $wikiuser = $wikipass = $wikiport = $wikihost = $useWikiDB = $limitedRun = $debug = $workers = $multithread = $runpage = $memoryFile = $dlaaLocation = $taskname = $username = $nobots = $apiURL = $userAgent = null;
-    unset( $dlaa, $oauthURL, $accessSecret, $accessToken, $consumerSecret, $consumerKey, $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $dlaaLocation, $taskname, $username, $nobots, $apiURL, $userAgent );
+    define( 'ENABLEMAIL', $enableMail );
+    define( 'TO', $to );
+    define( 'FROM', $from );
+    unset( $enableMail, $to, $from, $oauthURL, $accessSecret, $accessToken, $consumerSecret, $consumerKey, $db, $user, $pass, $port, $host, $texttable, $revisiontable, $wikidb, $wikiuser, $wikipass, $wikiport, $wikihost, $useWikiDB, $limitedRun, $debug, $workers, $multithread, $runpage, $memoryFile, $taskname, $username, $nobots, $apiURL, $userAgent );
 ?>
