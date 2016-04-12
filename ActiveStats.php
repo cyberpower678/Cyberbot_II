@@ -2,8 +2,8 @@
 
 ini_set('memory_limit','5G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
-require_once( '/data/project/cyberbot/Peachy/Init.php' );
-require_once('/data/project/cyberbot/database.inc');
+require_once( '/home/cyberpower678/Peachy/Init.php' );
+require_once('/home/cyberpower678/database.inc');
 
 $site = Peachy::newWiki( "wikidata" );
 $site->set_runpage( null );

@@ -1,9 +1,9 @@
 <?php
 
-ini_set('memory_limit','5G');
-$peachy = '/data/project/cyberbot/Peachy/Init.php';
-$databaseInc = '/data/project/cyberbot/database.inc';
-$spambotDataLoc = '/data/project/cyberbot/CyberbotII/spambotdata/';
+ini_set('memory_limit','2G');
+$peachy = '/home/cyberpower678/Peachy/Init.php';
+$databaseInc = '/home/cyberpower678/database.inc';
+$spambotDataLoc = '/home/cyberpower678/bots/cyberbotii/spambotdata/';
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once( $peachy );
 require_once( $databaseInc );

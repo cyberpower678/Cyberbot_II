@@ -1,9 +1,9 @@
 <?php
 
-ini_set('memory_limit','5G');
+ini_set('memory_limit','2G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
-require_once('/data/project/cyberbot/Peachy/Init.php' );
-require_once('/data/project/cyberbot/database.inc');
+require_once('/home/cyberpower678/Peachy/Init.php' );
+require_once('/home/cyberpower678/database.inc');
 
 $site2 = Peachy::newWiki( "meta" );
 $site = Peachy::newWiki( "cyberbotii" );
@@ -11,7 +11,7 @@ $site = Peachy::newWiki( "cyberbotii" );
 $a=0;
 
 //recovery from a crash or a stop midscan
-$status = unserialize( file_get_contents( '/data/project/cyberbot/CyberbotII/spambotdata/fsbstatus' ) );
+$status = unserialize( file_get_contents( '/home/cyberpower678/bots/cyberbotii/spambotdata/fsbstatus' ) );
 if( isset( $status['fstatus'] ) && $status['fstatus'] == 'scan' ) {
 	preg_match( '/\((.*?) of/i', $status['fscanprogress'], $previousoffset );
 	$a = $status['fbladd'];
@@ -99,7 +99,7 @@ function regexscan( $link ) {
 //generate a status file
 function updateStatus() {
 	global $status;
-	return file_put_contents( '/data/project/cyberbot/CyberbotII/spambotdata/fsbstatus', serialize($status) );	
+	return file_put_contents( '/home/cyberpower678/bots/cyberbotii/spambotdata/fsbstatus', serialize($status) );	
 }
 //This is the spam blacklist engine used in MediaWiki adapted for this script.  This ensures consistency with the actual wiki.
 function stripLines( $lines ) {
