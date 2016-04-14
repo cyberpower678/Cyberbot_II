@@ -36,6 +36,12 @@ class checkIfDeadTest extends PHPUnit_Framework_TestCase {
 		$this->assertTrue( $res );
 	}
 
+	public function testRedirectToRootWithoutWWW() {
+		$obj = new checkIfDead();
+		$res = $obj->checkDeadlink( 'https://astraldynamics.com' );
+		$this->assertFalse( $res );
+	}
+
 }
 
 ?>
