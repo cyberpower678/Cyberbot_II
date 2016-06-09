@@ -35,6 +35,22 @@ class checkIfDeadTest extends PHPUnit_Framework_TestCase {
 		$this->assertEquals( $expected, $result['results'] );
 	}
 
+
+	public function testCleanUrl() {
+		$obj = new checkIfDead();
+
+		// workaround to make private function testable
+		$reflection = new \ReflectionClass( get_class( $obj ) );
+		$method = $reflection->getMethod('cleanUrl');
+		$method->setAccessible( true );
+
+		$this->assertEquals( $method->invokeArgs( $obj, array( 'http://google.com?q=blah' ) ), 'google.com?q=blah' );
+		$this->assertEquals( $method->invokeArgs( $obj, array( 'https://www.google.com/' ) ), 'google.com' );
+		$this->assertEquals( $method->invokeArgs( $obj, array( 'ftp://google.com/#param=1' ) ), 'google.com' );
+		$this->assertEquals( $method->invokeArgs( $obj, array( '//google.com' ) ), 'google.com' );
+		$this->assertEquals( $method->invokeArgs( $obj, array( 'www.google.www.com' ) ), 'google.www.com' );
+	}
+
 }
 
 ?>
