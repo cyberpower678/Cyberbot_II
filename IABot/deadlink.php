@@ -16,6 +16,7 @@
 */
 
 set_include_path( get_include_path().PATH_SEPARATOR.dirname(__FILE__).DIRECTORY_SEPARATOR );
+date_default_timezone_set( "UTC" );
 ini_set('memory_limit','1G');
 echo "----------STARTING UP SCRIPT----------\nStart Timestamp: ".date('r')."\n\n";
 require_once( 'deadlink.config.inc.php' );
@@ -38,8 +39,12 @@ $TALK_ERROR_MESSAGE = "There were problems archiving a few links on the page.";
 $TALK_ERROR_MESSAGE_HEADER = "Notification of problematic links";
 $DEADLINK_TAGS = array( "{{dead-link}}" );
 $CITATION_TAGS = array( "{{cite web}}" );
-$ARCHIVE_TAGS = array( "{{wayback}}" );
+$WAYBACK_TAGS = array( "{{wayback}}" );
+$ARCHIVEIS_TAGS = array( "{{archiveis}}" );
+$MEMENTO_TAGS = array( "{{memento}}" );
+$WEBCITE_TAGS = array( "{{webcite}}" );
 $IGNORE_TAGS = array( "{{cbignore}}" );
+$PAYWALL_TAGS = array( "{{paywall}}" );
 $IC_TAGS = array();
 $VERIFY_DEAD = 1;
 $ARCHIVE_ALIVE = 1;
@@ -78,7 +83,6 @@ if( $lastpage === false || empty( $lastpage ) || is_null( $lastpage ) ) $lastpag
 while( true ) {
 	echo "----------RUN TIMESTAMP: ".date('r')."----------\n\n";
 	$runstart = time();
-	$runtime = 0;
 	if( !file_exists( IAPROGRESS.WIKIPEDIA.UNIQUEID."stats" ) ) {
 		$pagesAnalyzed = 0;
 		$linksAnalyzed = 0;
@@ -101,74 +105,30 @@ while( true ) {
 	$iteration = 0;	
 	//Get started with the run
 	do {
-		$config = API::getPageText( "User:Cyberbot II/Dead-links" );
-		preg_match( '/\n\|LINK_SCAN\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $LINK_SCAN = $param1[1];
-		preg_match( '/\n\|DEAD_ONLY\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $DEAD_ONLY = $param1[1];
-		preg_match( '/\n\|TAG_OVERRIDE\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $TAG_OVERRIDE = $param1[1];
-		preg_match( '/\n\|PAGE_SCAN\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $PAGE_SCAN = $param1[1];
-		preg_match( '/\n\|ARCHIVE_BY_ACCESSDATE\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $ARCHIVE_BY_ACCESSDATE = $param1[1];
-		preg_match( '/\n\|TOUCH_ARCHIVE\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $TOUCH_ARCHIVE = $param1[1];
-		preg_match( '/\n\|NOTIFY_ON_TALK\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $NOTIFY_ON_TALK = $param1[1];
-		preg_match( '/\n\|NOTIFY_ERROR_ON_TALK\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $NOTIFY_ERROR_ON_TALK = $param1[1];
-		preg_match( '/\n\|TALK_MESSAGE_HEADER\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $TALK_MESSAGE_HEADER = $param1[1];
-		preg_match( '/\n\|TALK_MESSAGE\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $TALK_MESSAGE = $param1[1];
-		preg_match( '/\n\|TALK_ERROR_MESSAGE_HEADER\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $TALK_ERROR_MESSAGE_HEADER = $param1[1];
-		preg_match( '/\n\|TALK_ERROR_MESSAGE\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $TALK_ERROR_MESSAGE = $param1[1];
-		preg_match( '/\n\|DEADLINK_TAGS\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $DEADLINK_TAGS = explode( ';', $param1[1] );
-		preg_match( '/\n\|CITATION_TAGS\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $CITATION_TAGS = explode( ';', $param1[1] );
-		preg_match( '/\n\|ARCHIVE_TAGS\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $ARCHIVE_TAGS = explode( ';', $param1[1] );
-		preg_match( '/\n\|IGNORE_TAGS\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $IGNORE_TAGS = explode( ';', $param1[1] );
-		preg_match( '/\n\|IC_TAGS\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $IC_TAGS = explode( ';', $param1[1] );  
-		preg_match( '/\n\|VERIFY_DEAD\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $VERIFY_DEAD = $param1[1];
-		preg_match( '/\n\|ARCHIVE_ALIVE\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $ARCHIVE_ALIVE = $param1[1];
-		preg_match( '/\n\|NOTIFY_ON_TALK_ONLY\s*=\s*(\d+)/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $NOTIFY_ON_TALK_ONLY = $param1[1];
-		preg_match( '/\n\|MLADDARCHIVE\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $MLADDARCHIVE = $param1[1];
-		preg_match( '/\n\|MLMODIFYARCHIVE\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $MLMODIFYARCHIVE = $param1[1];
-		preg_match( '/\n\|MLFIX\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $MLFIX = $param1[1];
-		preg_match( '/\n\|MLTAGGED\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $MLTAGGED = $param1[1];
-		preg_match( '/\n\|MLTAGREMOVED\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $MLTAGREMOVED = $param1[1];
-		preg_match( '/\n\|MLDEFAULT\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $MLDEFAULT = $param1[1];
-		preg_match( '/\n\|PLERROR\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $PLERROR = $param1[1];
-		preg_match( '/\n\|MAINEDITSUMMARY\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $MAINEDITSUMMARY = $param1[1];
-		preg_match( '/\n\|ERRORTALKEDITSUMMARY\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $ERRORTALKEDITSUMMARY = $param1[1];
-		preg_match( '/\n\|TALKEDITSUMMARY\s*=\s*\"(.*?)\"/i', $config, $param1 );
-		if( isset( $param1[1] ) ) $TALKEDITSUMMARY = $param1[1];
+		$config = API::getPageText( "User:".USERNAME."/Dead-links" );
+		
+		preg_match_all( '/\*(.*?)\s*=\s*(\d+)/i', $config, $toggleParams );
+		preg_match_all( '/\*(.*?)\s*=\s*\"(.*?)\"/i', $config, $stringParams );
+		
+		foreach( $toggleParams[1] as $id=>$variable ) {
+			eval( "if( isset( \$$variable ) ) \$$variable = {$toggleParams[2][$id]};" );
+		}
+		foreach( $stringParams[1] as $id=>$variable ) {
+			eval( "if( isset( \$$variable ) ) \$$variable = \"{$stringParams[2][$id]}\";" );
+			if( strpos( $variable, "TAGS" ) !== false ) {
+				eval( "if( !empty( \$$variable ) ) \$$variable = explode( ';', \$$variable );
+					   else \$$variable = array();" );
+			}
+		}
 		
 		if( isset( $overrideConfig ) && is_array( $overrideConfig ) ) {
 			foreach( $overrideConfig as $variable=>$value ) {
 				eval( "if( isset( \$$variable ) ) \$$variable = \$value;" );
 			}
 		}
-		Core::escapeTags( $DEADLINK_TAGS, $ARCHIVE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $IC_TAGS );
+		
+		API::escapeTags( $DEADLINK_TAGS, $WAYBACK_TAGS, $ARCHIVEIS_TAGS, $MEMENTO_TAGS, $WEBCITE_TAGS, $IGNORE_TAGS, $CITATION_TAGS, $IC_TAGS, $PAYWALL_TAGS );
+		$ARCHIVE_TAGS = array_merge( $WAYBACK_TAGS, $ARCHIVEIS_TAGS, $MEMENTO_TAGS, $WEBCITE_TAGS );
 		
 		$iteration++;
 		if( $iteration !== 1 ) {
@@ -227,14 +187,14 @@ while( true ) {
 				$pagesAnalyzed++;
 				$runpagecount++;
 				if( WORKERS === false ) {
-					$commObject = new API( $tpage['title'], $tpage['pageid'], $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY );
+					$commObject = new API( $tpage['title'], $tpage['pageid'], $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $WAYBACK_TAGS, $WEBCITE_TAGS, $MEMENTO_TAGS, $ARCHIVEIS_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $PAYWALL_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY );
 					$tmp = PARSERCLASS;
 					$parser = new $tmp( $commObject );
 					$stats = $parser->analyzePage();
 					$commObject->closeResources();
 					$parser = $commObject = null;
 				} else {
-					$testbot[$tid] = new ThreadedBot( $tpage['title'], $tpage['pageid'], $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY, "test" );
+					$testbot[$tid] = new ThreadedBot( $tpage['title'], $tpage['pageid'], $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $WAYBACK_TAGS, $WEBCITE_TAGS, $MEMENTO_TAGS, $ARCHIVEIS_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $PAYWALL_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY, "test" );
 					$testbot[$tid]->run();
 					$stats = $testbot[$tid]->result;
 				}
@@ -274,7 +234,7 @@ while( true ) {
 				$pagesAnalyzed++;
 				$runpagecount++;
 				echo "Submitted {$tpage['title']}, job ".($tid+1)." for analyzing...\n";
-				$workerQueue->submit( new ThreadedBot( $tpage['title'], $tpage['pageid'], $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY, $tid ) );	   
+				$workerQueue->submit( new ThreadedBot( $tpage['title'], $tpage['pageid'], $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $WAYBACK_TAGS, $WEBCITE_TAGS, $MEMENTO_TAGS, $ARCHIVEIS_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $PAYWALL_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY, $tid ) );	   
 				if( LIMITEDRUN === true && is_int( $debugStyle ) && $debugStyle === $runpagecount ) break;
 			}
 			$workerQueue->shutdown();  
@@ -305,9 +265,8 @@ while( true ) {
 	} while( !empty( $return ) && DEBUG === false && LIMITEDRUN === false );
 	$pages = false; 
 	$runend = time();
-	$runtime = $runend-$runstart;
 	echo "Printing log report, and starting new run...\n\n";
-	if( DEBUG === false && LIMITEDRUN === false ) Core::generateLogReport();
+	if( DEBUG === false && LIMITEDRUN === false ) DB::generateLogReport();
 	if( file_exists( IAPROGRESS.WIKIPEDIA.UNIQUEID."stats" ) && LIMITEDRUN === false ) unlink( IAPROGRESS.WIKIPEDIA.UNIQUEID."stats" );  
 	if( DEBUG === false && LIMITEDRUN === false ) sleep(10);
 	if( DEBUG === true || LIMITEDRUN === true ) exit(0);										   

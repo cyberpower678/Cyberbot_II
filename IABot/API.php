@@ -55,7 +55,7 @@ class API {
 	* @var mixed
 	* @access public
 	*/
-	public $page, $pageid, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY;
+	public $page, $pageid, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $WAYBACK_TAGS, $WEBCITE_TAGS, $MEMENTO_TAGS, $ARCHIVEIS_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $PAYWALL_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY;
 	
 	/**
 	* Stores the page content for the page being analyzed
@@ -111,7 +111,7 @@ class API {
 	* @copyright Copyright (c) 2016, Maximilian Doerr
 	* @return void
 	*/
-	public function __construct( $page, $pageid, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY ) {
+	public function __construct( $page, $pageid, $ARCHIVE_ALIVE, $TAG_OVERRIDE, $ARCHIVE_BY_ACCESSDATE, $TOUCH_ARCHIVE, $DEAD_ONLY, $NOTIFY_ERROR_ON_TALK, $NOTIFY_ON_TALK, $TALK_MESSAGE_HEADER, $TALK_MESSAGE, $TALK_ERROR_MESSAGE_HEADER, $TALK_ERROR_MESSAGE, $DEADLINK_TAGS, $CITATION_TAGS, $IGNORE_TAGS, $WAYBACK_TAGS, $WEBCITE_TAGS, $MEMENTO_TAGS, $ARCHIVEIS_TAGS, $ARCHIVE_TAGS, $IC_TAGS, $PAYWALL_TAGS, $VERIFY_DEAD, $LINK_SCAN, $NOTIFY_ON_TALK_ONLY, $MLADDARCHIVE, $MLMODIFYARCHIVE, $MLTAGGED, $MLTAGREMOVED, $MLFIX, $MLDEFAULT, $PLERROR, $MAINEDITSUMMARY, $ERRORTALKEDITSUMMARY, $TALKEDITSUMMARY ) {
 		$this->page = $page;
 		$this->pageid = $pageid;
 		$this->ARCHIVE_ALIVE = $ARCHIVE_ALIVE;
@@ -128,8 +128,13 @@ class API {
 		$this->DEADLINK_TAGS = $DEADLINK_TAGS;
 		$this->CITATION_TAGS = $CITATION_TAGS;
 		$this->IGNORE_TAGS = $IGNORE_TAGS;
+		$this->WAYBACK_TAGS = $WAYBACK_TAGS;
+		$this->WEBCITE_TAGS = $WEBCITE_TAGS;
+		$this->MEMENTO_TAGS = $MEMENTO_TAGS;
+		$this->ARCHIVEIS_TAGS = $ARCHIVEIS_TAGS;
 		$this->ARCHIVE_TAGS = $ARCHIVE_TAGS;
 		$this->IC_TAGS = $IC_TAGS;
+		$this->PAYWALL_TAGS = $PAYWALL_TAGS;
 		$this->VERIFY_DEAD = $VERIFY_DEAD;
 		$this->LINK_SCAN = $LINK_SCAN;	
 		$this->NOTIFY_ON_TALK_ONLY = $NOTIFY_ON_TALK_ONLY;
@@ -198,7 +203,7 @@ class API {
 		curl_setopt( self::$globalCurl_handle, CURLOPT_POST, 0 );
 		$data = curl_exec( self::$globalCurl_handle );
 		if ( !$data ) {
-			$error = 'Curl error: ' . htmlspecialchars( curl_error( $ch ) );
+			$error = 'Curl error: ' . htmlspecialchars( curl_error( self::$globalCurl_handle ) );
 			goto loginerror;
 		}
 		$err = json_decode( $data );
@@ -468,7 +473,6 @@ loginerror: echo "Failed!!\n";
 			} elseif( isset( $this->db->dbValues[$id]['archived'] ) && $this->db->dbValues[$id]['archived'] == 0 ) {
 				$returnArray['result'][$id] = false;
 				$this->db->dbValues[$id]['has_archive'] = 0;
-				if( !isset( $this->db->dbValues[$id]['create'] ) ) $this->db->dbValues[$id]['update'] = true;
 				continue;
 			}
 			$url = $item[0];
@@ -614,7 +618,7 @@ loginerror: echo "Failed!!\n";
 				curl_setopt( $curl_instances[$id], CURLOPT_HTTPGET, 1 );
 				curl_setopt( $curl_instances[$id], CURLOPT_POST, 0 );
 				if( isset( $item['data'] ) && !is_null( $item['data'] ) && is_array( $item['data'] ) ) {
-					$url .= '?' . http_build_query( $item['data'] );
+					$item['url'] .= '?' . http_build_query( $item['data'] );
 				}
 				curl_setopt( $curl_instances[$id], CURLOPT_URL, $item['url'] );	
 			} else {
@@ -726,6 +730,7 @@ loginerror: echo "Failed!!\n";
 	* @param bool $bot Mark as a bot edit
 	* @param mixed $section Edit a specific section or create a "new" section
 	* @param string $title Title of new section being created
+	* @param string $error Error message passback, if error occured.
 	* @access public
 	* @static
 	* @author Maximilian Doerr (Cyberpower678)
@@ -733,13 +738,16 @@ loginerror: echo "Failed!!\n";
 	* @copyright Copyright (c) 2016, Maximilian Doerr
 	* @return mixed Revid if successful, else false
 	*/
-	public static function edit( $page, $text, $summary, $minor = false, $timestamp = false, $bot = true, $section = false, $title = "" ) {
+	public static function edit( $page, $text, $summary, $minor = false, $timestamp = false, $bot = true, $section = false, $title = "", &$error = null ) {
 		if( !self::isEnabled() ) {
-			echo "ERROR: BOT IS DISABLED!!\n\n";
+			$error = "BOT IS DISABLED";
+			echo "ERROR: BOT IS DISABLED!!\n";
 			return false; 
 		}
 		if( NOBOTS === true && self::nobots( $text ) ) {
-			echo "ERROR: RESTRICTED BY NOBOTS!!\n\n";
+			$error = "RESTRICTED BY NOBOTS";
+			echo "ERROR: RESTRICTED BY NOBOTS!!\n";
+			DB::logEditFailure( $page, $text, "RESTRICTED BY NOBOTS" );
 			return false;
 		}
 		if( is_null( self::$globalCurl_handle ) ) self::initGlobalCurlHandle();
@@ -786,16 +794,24 @@ loginerror: echo "Failed!!\n";
 		if( isset( $data['edit'] ) && $data['edit']['result'] == "Success" && !isset( $data['edit']['nochange']) ) {
 			return $data['edit']['newrevid'];
 		} elseif( isset( $data['error'] ) ) {
+			$error = "{$data['error']['code']}: {$data['error']['info']}";
 			echo "EDIT ERROR: {$data['error']['code']}: {$data['error']['info']}\n";
+			DB::logEditFailure( $page, $text, "{$data['error']['code']}: {$data['error']['info']}" );
 			return false; 
 		} elseif( isset( $data['edit'] ) && isset( $data['edit']['nochange'] ) ) {
-			echo "EDIT ERROR: The article remained unchanged!!\n\n";
+			$error = "article remained unchanged";
+			echo "EDIT ERROR: The article remained unchanged!!\n";
+			DB::logEditFailure( $page, $text, "article remained unchanged" );
 			return false;
 		} elseif( isset( $data['edit'] ) && $data['edit']['result'] != "Success" ) {
-			echo "EDIT ERROR: The edit was unsuccessful for some unknown reason!\n\n";
+			$error = "unknown error";
+			echo "EDIT ERROR: The edit was unsuccessful for some unknown reason!\n";
+			DB::logEditFailure( $page, $text, "unknown error" );
 			return false;
 		} else {
-			echo "EDIT ERROR: Received a bad response from the API.\nResponse: $data2\n\n";
+			$error = "bad response";
+			echo "EDIT ERROR: Received a bad response from the API.\nResponse: $data2\n";
+			DB::logEditFailure( $page, $text, "bad response" );
 			return false;
 		}
 	}
@@ -1213,7 +1229,7 @@ loginerror: echo "Failed!!\n";
 			curl_setopt( self::$globalCurl_handle, CURLOPT_HTTPHEADER, array( self::generateOAuthHeader( 'POST', API ) ) );
 			$data = curl_exec( self::$globalCurl_handle ); 
 			$data = unserialize( $data ); 
-			foreach( $data['query']['pages'] as $template ) {
+			if( isset( $data['query']['pages'] ) ) foreach( $data['query']['pages'] as $template ) {
 				if( isset( $template['redirects'] ) ) $returnArray = array_merge( $returnArray, $template['redirects'] );
 			} 
 			if( isset( $data['query-continue']['redirects']['rdcontinue'] ) ) $resume = $data['query-continue']['redirects']['rdcontinue'];
@@ -1337,6 +1353,177 @@ loginerror: echo "Failed!!\n";
 			if( $data == EXPECTEDRETURN ) return true;
 			else return false;
 		} else return null;
+	}
+
+	/**
+	 * Escape the regex for all the tags and get redirect tags
+	 *
+	 * @param array $DEADLINK_TAGS All dead tags
+	 * @param array $ARCHIVE_TAGS All archive tags
+	 * @param array $IGNORE_TAGS All ignore tags
+	 * @param array $CITATION_TAGS All citation tags
+	 * @access public
+	 * @static
+	 * @author Maximilian Doerr (Cyberpower678)
+	 * @license https://www.gnu.org/licenses/gpl.txt
+	 * @copyright Copyright (c) 2016, Maximilian Doerr
+	 * @return void
+	 */
+	public static function escapeTags ( &$DEADLINK_TAGS, &$WAYBACK_TAGS, &$ARCHIVEIS_TAGS, &$MEMENTO_TAGS, &$WEBCITE_TAGS, &$IGNORE_TAGS, &$CITATION_TAGS, &$IC_TAGS, &$PAYWALL_TAGS ) {
+		$marray = $tarray = array();
+		$toEscape = array();
+		$toEscape[] = $DEADLINK_TAGS;
+		$toEscape[] = $WAYBACK_TAGS;
+		$toEscape[] = $ARCHIVEIS_TAGS;
+		$toEscape[] = $MEMENTO_TAGS;
+		$toEscape[] = $WEBCITE_TAGS;
+		$toEscape[] = $IGNORE_TAGS;
+		$toEscape[] = $CITATION_TAGS;
+		$toEscape[] = $IC_TAGS;
+		$toEscape[] = $PAYWALL_TAGS;
+		foreach( $toEscape as $id=>$escapee ) {
+			$tarray = array();
+			$marray = array();
+			foreach( $escapee as $tag ) {
+				$marray[] = "Template:".str_replace( "{", "", str_replace( "}", "", $tag ) );
+				$tarray[] = preg_quote( $tag, '/' );
+				if( strpos( $tag, " " ) ) $tarray[] = preg_quote( str_replace( " ", "_", $tag ), '/' );
+			}
+			do {
+				$redirects = API::getRedirects( $marray );
+				$marray = array();
+				foreach( $redirects as $tag ) {
+					$marray[] = $tag['title'];
+					$tarray[] = preg_quote( str_replace( "Template:", "{{", $tag['title'] )."}}", '/' );
+					if( strpos( $tag['title'], " " ) ) $tarray[] = preg_quote( str_replace( " ", "_", str_replace( "Template:", "{{", $tag['title'] )."}}" ), '/' );
+				}
+			} while( !empty( $redirects ) );
+			$toEscape[$id] = $tarray;
+		}
+		unset( $marray, $tarray );
+		$DEADLINK_TAGS = $toEscape[0];
+		$WAYBACK_TAGS = $toEscape[1];
+		$ARCHIVEIS_TAGS = $toEscape[2];
+		$MEMENTO_TAGS = $toEscape[3];
+		$WEBCITE_TAGS = $toEscape[4];
+		$IGNORE_TAGS = $toEscape[5];
+		$CITATION_TAGS = $toEscape[6];
+		$IC_TAGS = $toEscape[7];
+		$PAYWALL_TAGS = $toEscape[8];
+	}
+
+	/**
+	 * Retrieves URL information given a webcite URL
+	 *
+	 * @access public
+	 * @param string $url A webcite URL that goes to an archive.
+	 * @author Maximilian Doerr (Cyberpower678)
+	 * @license https://www.gnu.org/licenses/gpl.txt
+	 * @copyright Copyright (c) 2016, Maximilian Doerr
+	 * @return array Details about the archive.
+	 */
+	public static function resolveWebCiteURL( $url ) {
+		$returnArray = array();
+		if( preg_match('/\/\/(?:www\.)?webcitation.org\/query\?(\S*)/i', $url, $match ) ) {
+			$query = "http:".$match[0]."&returnxml=true";
+		} elseif( preg_match( '/\/\/(?:www\.)?webcitation.org\/(\S*)/i', $url, $match ) ) {
+			$query = "http://www.webcitation.org/query?id=".$match[1]."&returnxml=true";
+		} else return $returnArray;
+		if( is_null( self::$globalCurl_handle ) ) self::initGlobalCurlHandle();
+		curl_setopt( self::$globalCurl_handle, CURLOPT_HTTPGET, 1 );
+		curl_setopt( self::$globalCurl_handle, CURLOPT_POST, 0 );
+		curl_setopt( self::$globalCurl_handle, CURLOPT_URL, $query );
+		$data = curl_exec( self::$globalCurl_handle );
+		$data = preg_replace( '/\<br\s\/\>\n\<b\>.*? on line \<b\>\d*\<\/b\>\<br\s\/\>/i', "", $data );
+		$data = trim( $data );
+		$xml_parser = xml_parser_create();
+		xml_parse_into_struct($xml_parser, $data, $vals);
+		xml_parser_free($xml_parser);
+		foreach( $vals as $val ) {
+			if( $val['tag'] == "TIMESTAMP" && isset( $val['value'] ) ) $returnArray['archive_time'] = strtotime( $val['value'] );
+			if( $val['tag'] == "ORIGINAL_URL" && isset( $val['value'] ) ) $returnArray['url'] = $val['value'];
+			if( $val['tag'] == "REDIRECTED_TO_URL" && isset( $val['value'] ) ) $returnArray['url'] = $val['value'];
+			if( $val['tag'] == "WEBCITE_URL" && isset( $val['value'] ) ) $returnArray['archive_url'] = $val['value'];
+			if( $val['tag'] == "RESULT" && $val['type'] == "close" ) break;
+		}
+		$returnArray['archive_host'] = "webcite";
+		return $returnArray;
+	}
+
+	/**
+	 * Retrieves URL information given a memento URL
+	 *
+	 * @access public
+	 * @param string $url A memento URL that goes to an archive.
+	 * @author Maximilian Doerr (Cyberpower678)
+	 * @license https://www.gnu.org/licenses/gpl.txt
+	 * @copyright Copyright (c) 2016, Maximilian Doerr
+	 * @return array Details about the archive.
+	 */
+	public static function resolveMementoURL( $url ) {
+		$returnArray = array();
+		if( preg_match( '/\/\/timetravel\.mementoweb\.org\/(?:memento|api\/json)\/(\d*?|\*)\/(\S*)/i', $url, $match ) ) {
+			$returnArray['archive_url'] = "http://timetravel.mementoweb.org/memento/".$match[1]."/".$match[2];
+			$returnArray['url'] = urldecode( $match[2] );
+			if( $match[1] != "*" ) $returnArray['archive_time'] = strtotime( $match[1] );
+			else $returnArray['archive_time'] = "x";
+			$returnArray['archive_host'] = "memento";
+		}
+		return $returnArray;
+	}
+
+	/**
+	 * Retrieves URL information given an archive.is URL
+	 *
+	 * @access public
+	 * @param string $url An archive.is URL that goes to an archive.
+	 * @author Maximilian Doerr (Cyberpower678)
+	 * @license https://www.gnu.org/licenses/gpl.txt
+	 * @copyright Copyright (c) 2016, Maximilian Doerr
+	 * @return array Details about the archive.
+	 */
+	
+	public static function resolveArchiveIsURL( $url ) {
+		$returnArray = array();
+		if( is_null( self::$globalCurl_handle ) ) self::initGlobalCurlHandle();
+		curl_setopt( self::$globalCurl_handle, CURLOPT_HTTPGET, 1 );
+		curl_setopt( self::$globalCurl_handle, CURLOPT_POST, 0 );
+		curl_setopt( self::$globalCurl_handle, CURLOPT_URL, $url );
+		curl_setopt( self::$globalCurl_handle, CURLOPT_FOLLOWLOCATION, 1 );
+		$data = curl_exec( self::$globalCurl_handle );
+		if( preg_match( '/name\=\"q\" value\=\"(.*?)\"\/\>/i', $data, $match ) ) {
+			$returnArray['url'] = $match[1];
+		}
+		if( preg_match( '/archived (.*?) UTC/i', $data, $match ) ) {
+			$returnArray['archive_time'] = strtotime( $match[1] );
+		}
+		if( preg_match( '/archiveurl  \= (\S*?)\n/i', $data, $match ) ) {
+			$returnArray['archive_url'] = trim( $match[1] );
+		}
+		$returnArray['archive_host'] = "archiveis";
+		return $returnArray;
+	}
+
+	/**
+	 * Retrieves URL information given a Wayback URL
+	 *
+	 * @access public
+	 * @param string $url A Wayback URL that goes to an archive.
+	 * @author Maximilian Doerr (Cyberpower678)
+	 * @license https://www.gnu.org/licenses/gpl.txt
+	 * @copyright Copyright (c) 2016, Maximilian Doerr
+	 * @return array Details about the archive.
+	 */
+	public static function resolveWaybackURL( $url ) {
+		$returnArray = array();
+		if( preg_match( '/\/\/(?:web\.)?archive\.org(?:\/web)?\/(\d*?|\*)\/(\S*)/i', $url, $match ) ) {
+			$returnArray['archive_url'] = "https://web.archive.org/web/".$match[1]."/".$match[2];
+			$returnArray['url'] = urldecode( $match[2] );
+			if( $match[1] != "*" ) $returnArray['archive_time'] = strtotime( $match[1] );
+			else $returnArray['archive_time'] = "x";
+			$returnArray['archive_host'] = "wayback";
+		}
+		return $returnArray;
 	}
 	
 	/**

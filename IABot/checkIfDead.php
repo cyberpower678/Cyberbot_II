@@ -20,12 +20,12 @@
 */
 
 /**
-	* checkIfDead class
-	* Checks if a link is dead
-	* @author Niharika Kohli (Niharika29)
-	* @license https://www.gnu.org/licenses/gpl.txt
-	* @copyright Copyright (c) 2016, Niharika Kohli
-*/
+ * checkIfDead class
+ * Checks if a link is dead
+ * @author Niharika Kohli (Niharika29)
+ * @license https://www.gnu.org/licenses/gpl.txt
+ * @copyright Copyright (c) 2016, Niharika Kohli
+ */
 
 class checkIfDead {
 
@@ -54,10 +54,26 @@ class checkIfDead {
 				return false;
 			}
 
+			//In case the protocol is missing, assume it goes to HTTPS
+			if( is_null( parse_url( $url, PHP_URL_SCHEME ) ) ) $url = "https:$url";
+
+			//Determine if we are using FTP or HTTP
+			if( strtolower( parse_url( $url, PHP_URL_SCHEME ) ) == "ftp" ) {
+				$method = "FTP";
+			} else {
+				$method = "HTTP";
+			}
+
+			if( $method == "FTP" ) {
+				curl_setopt( $curl_instances[$id], CURLOPT_FTP_USE_EPRT, 1 );
+				curl_setopt( $curl_instances[$id], CURLOPT_FTP_USE_EPSV, 1 );
+				curl_setopt( $curl_instances[$id], CURLOPT_FTPSSLAUTH, CURLFTPAUTH_DEFAULT );
+				curl_setopt( $curl_instances[$id], CURLOPT_FTP_FILEMETHOD, CURLFTPMETHOD_SINGLECWD );
+			}
+
 			curl_setopt( $curl_instances[$id], CURLOPT_URL, $url );
 			curl_setopt( $curl_instances[$id], CURLOPT_HEADER, 1 );
-			curl_setopt( $curl_instances[$id], CURLOPT_NOBODY, 1 );
-			if( $full === true ) curl_setopt( $curl_instances[$id], CURLOPT_NOBODY, 0 );
+			if( $full !== true ) curl_setopt( $curl_instances[$id], CURLOPT_NOBODY, 1 );
 			curl_setopt( $curl_instances[$id], CURLOPT_RETURNTRANSFER, true );
 			curl_setopt( $curl_instances[$id], CURLOPT_FOLLOWLOCATION, true );
 			curl_setopt( $curl_instances[$id], CURLOPT_TIMEOUT, 30 ); // Set 30 second timeout for the entire curl operation to take place
@@ -91,7 +107,10 @@ class checkIfDead {
 		curl_multi_close( $multicurl_resource );
 		if( !empty( $fullCheckURLs ) ) {
 			$results = $this->checkDeadlinks( $fullCheckURLs, true );
-			foreach( $results as $id=>$result ) $returnArray[$id] = $result;
+			foreach( $results['results'] as $id=>$result ) {
+				$returnArray['results'][$id] = $result;
+				$returnArray['errors'][$id] = $results['errors'][$id];
+			}
 		}
 		return $returnArray;
 	}
@@ -105,8 +124,18 @@ class checkIfDead {
 	 * @return bool true if dead; false if not
 	 */
 	protected function processResult( $headers, $curlerrno, $url ) {
+		//Determine if we are using FTP or HTTP
+		if( strtolower( parse_url( $url, PHP_URL_SCHEME ) ) == "ftp" ) {
+			$method = "FTP";
+		} else {
+			$method = "HTTP";
+		}
 		//Possible curl error numbers that can indicate a server failure, and conversly, a badlink
 		$curlerrors = array( 3, 5, 6, 7, 8, 10, 11, 12, 13, 19, 28, 31, 47, 51, 52, 60, 61, 64, 68, 74, 83, 85, 86, 87 );
+		//Official HTTP codes that aren't an indication of errors.
+		$httpCodes = array( 100, 101, 102, 200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 300, 301, 302, 303, 304, 305, 306, 307, 308, 103 );
+		//FTP codes that aren't an indication of errors.
+		$ftpCodes = array( 100, 110, 120, 125, 150, 200, 202, 211, 212, 213, 214, 215, 220, 221, 225, 226, 227, 228, 229, 230, 231, 232, 234, 250, 257, 300, 331, 332, 350, 600, 631, 633 );
 		// Get HTTP code returned
 		$httpCode = $headers['http_code'];
 		// Get final URL
@@ -116,19 +145,17 @@ class checkIfDead {
 		// Get an array of possible root urls
 		$possibleRoots = $this->getDomainRoots( $url );
 		if ( $httpCode >= 400 && $httpCode < 600 ) {
-			if ( $httpCode == 401 || $httpCode == 503 || $httpCode == 507 ) {
-				return false;
-			} else {
-				// Perform a GET request because some servers don't support HEAD requests
-				return null;
-			}
-			// Check for error messages in redirected URL string
-		} elseif ( strpos( $effectiveUrlClean, '404.htm' ) !== false ||
-				   strpos( $effectiveUrlClean, '/404/' ) !== false ||
-				   stripos( $effectiveUrlClean, 'notfound' ) !== false ) {
+			// Perform a GET request because some servers don't support HEAD requests
+			return null;
+		}
+		// Check for error messages in redirected URL string
+		if ( strpos( $effectiveUrlClean, '404.htm' ) !== false ||
+			strpos( $effectiveUrlClean, '/404/' ) !== false ||
+			stripos( $effectiveUrlClean, 'notfound' ) !== false ) {
 			return true;
+		}
 		// Check if there was a redirect by comparing final URL with original URL
-		} elseif ( $effectiveUrlClean != $this->cleanUrl( $url ) ) {
+		if ( $effectiveUrlClean != $this->cleanUrl( $url ) ) {
 			// Check against possible roots
 			foreach ( $possibleRoots as $root ) {
 				// We found a match with final url and a possible root url
@@ -136,12 +163,20 @@ class checkIfDead {
 					return true;
 				}
 			}
-			return false;
-		} elseif( in_array( $curlerrno, $curlerrors ) ) {
-			return true;
-		} else {
-			return false;
 		}
+		//If there was an error during the CURL process, check if the code returned is a server side problem
+		if( in_array( $curlerrno, $curlerrors ) ) {
+			return true;
+		}
+		//Check for valid non-error codes for HTTP or FTP
+		if( $method == "HTTP" && !in_array( $httpCode, $httpCodes ) ) {
+			return true;
+		//Check for valid non-error codes for FTP
+		} elseif( $method == "FTP" && !in_array( $httpCode, $ftpCodes ) ) {
+			return true;
+		}
+		//Yay, the checks passed, and the site is alive.
+		return false;
 	}
 
 	/**
@@ -168,16 +203,17 @@ class checkIfDead {
 	}
 
 	/**
-	 * Remove scheme, 'www', and trailing slash
+	 * Remove scheme, 'www', URL fragment, leading forward slashes and trailing slash
 	 * @param string $input
 	 * @return Cleaned string
 	 */
 	private function cleanUrl( $input ) {
-		// Remove scheme and www, if present
-		$url = preg_replace( '/https?:\/\/|www./', '', $input );
-		// Remove trailing slash, if present
+		// scheme and www
+		$url = preg_replace( '/^((https?:|ftp:)?(\/\/))?(www\.)?/', '', $input );
+		// fragment
+		$url = preg_replace( '/#.*/' , '', $url );
+		// trailing slash
 		$url = preg_replace('{/$}', '', $url );
 		return $url;
 	}
-
 }
