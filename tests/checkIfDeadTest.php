@@ -24,11 +24,12 @@ class checkIfDeadTest extends PHPUnit_Framework_TestCase {
 					'https://en.wikipedia.org/wiki/Main_Page',
 					'https://en.wikipedia.org/w/index.php?title=Republic_of_India',
 					'https://astraldynamics.com',
-					'http://www.eonline.com/au/news/386489/2013-grammy-awards-winners-the-complete-list',
+					// 'http://www.eonline.com/au/news/386489/2013-grammy-awards-winners-the-complete-list', // unreliable, randomly returns 405 error
 					'http://news.bbc.co.uk/2/hi/uk_news/england/coventry_warwickshire/6236900.stm',
 					'http://napavalleyregister.com/news/napa-pipe-plant-loads-its-final-rail-car/article_695e3e0a-8d33-5e3b-917c-07a7545b3594.html',
 					'http://content.onlinejacc.org/cgi/content/full/41/9/1633',
-					'http://flysunairexpress.com/#about'
+					'http://flysunairexpress.com/#about',
+					'ftp://ftp.rsa.com/pub/pkcs/ascii/layman.asc'
 				);
 		$result = $obj->checkDeadlinks( $urls );
 		$expected = array( false, false, false, false, false, false, false, false );
