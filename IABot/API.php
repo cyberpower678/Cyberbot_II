@@ -127,7 +127,6 @@ class API {
 		curl_setopt( self::$globalCurl_handle, CURLOPT_CONNECTTIMEOUT, 10 );
 		curl_setopt( self::$globalCurl_handle, CURLOPT_FOLLOWLOCATION, 0 );
 		curl_setopt( self::$globalCurl_handle, CURLOPT_SSL_VERIFYPEER, false );
-		curl_setopt( self::$globalCurl_handle, CURLOPT_SAFE_UPLOAD, true );
 	}
 
 	/**
