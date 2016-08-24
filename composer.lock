@@ -1,0 +1,89 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
+        "This file is @generated automatically"
+    ],
+    "hash": "70b82c7094bea2eecb2efd66a0401003",
+    "content-hash": "e94e47500e7dd4dfe80a98a21110f484",
+    "packages": [
+        {
+            "name": "niharika29/deadlinkchecker",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Niharika29/DeadlinkChecker.git",
+                "reference": "4c55212669091dada1ca1ba95b7656b950274e1f"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Niharika29/DeadlinkChecker/zipball/4c55212669091dada1ca1ba95b7656b950274e1f",
+                "reference": "4c55212669091dada1ca1ba95b7656b950274e1f",
+                "shasum": ""
+            },
+            "require": {
+                "ext-curl": "*",
+                "lib-curl": ">=7.15.1",
+                "php": ">=5.5.9"
+            },
+            "require-dev": {
+                "jakub-onderka/php-parallel-lint": "~0.8",
+                "mediawiki/mediawiki-codesniffer": "0.7.2",
+                "phpunit/phpunit": "~4.8|~5.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Wikimedia\\DeadlinkChecker\\": "src/"
+                }
+            },
+            "scripts": {
+                "fix": [
+                    "phpcbf"
+                ],
+                "test": [
+                    "composer validate --no-interaction",
+                    "parallel-lint . --exclude vendor",
+                    "phpunit",
+                    "phpcs -p"
+                ]
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Niharika Kohli",
+                    "email": "niharikakohli29@gmail.com",
+                    "role": "Developer"
+                },
+                {
+                    "name": "Maximilian Doerr",
+                    "email": "maximilian.doerr@gmail.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Library for checking if a given link is dead or alive",
+            "homepage": "https://github.com/Niharika29/DeadlinkChecker",
+            "keywords": [
+                "deadlink",
+                "link"
+            ],
+            "support": {
+                "source": "https://github.com/Niharika29/DeadlinkChecker/tree/master",
+                "issues": "https://github.com/Niharika29/DeadlinkChecker/issues"
+            },
+            "time": "2016-08-16 18:12:54"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": {
+        "niharika29/deadlinkchecker": 20
+    },
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": [],
+    "platform-dev": []
+}
