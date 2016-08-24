@@ -34,6 +34,9 @@
 * @license https://www.gnu.org/licenses/gpl.txt
 * @copyright Copyright (c) 2016, Maximilian Doerr
 */
+require __DIR__ . '/../../vendor/autoload.php';
+use Wikimedia\DeadlinkChecker\CheckIfDead;
+
 abstract class Parser {
 
 	/**
@@ -45,9 +48,9 @@ abstract class Parser {
 	public $commObject;
 
 	/**
-	* The checkIfDead class
+	* The CheckIfDead class
 	*
-	* @var checkIfDead
+	* @var CheckIfDead
 	* @access protected
 	*/
 	protected $deadCheck;
@@ -98,7 +101,7 @@ abstract class Parser {
 	*/
 	public function __construct( API $commObject ) {
 		$this->commObject = $commObject;
-		$this->deadCheck = new checkIfDead();
+		$this->deadCheck = new CheckIfDead();
 	}
 
 	/**
@@ -129,13 +132,18 @@ abstract class Parser {
 		$history = array();
 		$newtext = $this->commObject->content;
 
+<<<<<<< HEAD
 		if( $this->commObject->config['link_scan'] == 0 ) $links = $this->getExternalLinks();
+=======
+		if( $this->commObject->LINK_SCAN == 0 ) $links = $this->getExternalLinks();
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 		else $links = $this->getReferences();
 		$analyzed = $links['count'];
 		unset( $links['count'] );
 
 		//Process the links
 		$checkResponse = $archiveResponse = $fetchResponse = $toArchive = $toFetch = array();
+<<<<<<< HEAD
 		//Perform a 3 phase process.
 		//Phases 1 and 2 collect archive information based on the configuration settings on wiki, needed for further analysis.
 		//Phase 3 does the actual rescueing.
@@ -188,6 +196,102 @@ abstract class Parser {
 								$archiveProblems[$tid] = $link['url'];
 							}
 						}
+=======
+		foreach( $links as $tid=>$link ) {
+			if( $link['link_type'] == "reference" ) $reference = true;
+			else $reference = false;
+			$id = 0;
+			do {
+				if( $reference === true ) $link = $links[$tid]['reference'][$id];
+				else $link = $link[$link['link_type']];
+				if( isset( $link['ignore'] ) && $link['ignore'] === true ) break;
+				if( ( $link['is_dead'] !== true && $link['tagged_dead'] !== true ) && $this->commObject->ARCHIVE_ALIVE == 1 ) {
+					if( $reference === false ) $toArchive[$tid] = $link['url'];
+					else $toArchive["$tid:$id"] = $link['url'];
+				}
+			} while( $reference === true && isset( $links[$tid]['reference'][++$id] ) );
+		}
+		if( !empty( $toArchive ) ) {
+			$checkResponse = $this->commObject->isArchived( $toArchive );
+			$checkResponse = $checkResponse['result'];
+			$toArchive = array();
+		}
+		foreach( $links as $tid=>$link ) {
+			if( $link['link_type'] == "reference" ) $reference = true;
+			else $reference = false;
+			$id = 0;
+			do {
+				if( $reference === true ) $link = $links[$tid]['reference'][$id];
+				else $link = $link[$link['link_type']];
+				if( isset( $link['ignore'] ) && $link['ignore'] === true ) break;
+
+				//Create a flag that marks the source as being improperly formatting and needing fixing
+				$invalidEntry = (( $link['has_archive'] === true && $link['archive_type'] == "invalid" ) || ( $link['tagged_dead'] === true && $link['tag_type'] == "invalid" )) && $link['link_type'] != "x";
+				//Create a flag that determines basic clearance to edit a source.
+				$linkRescueClearance = ((($this->commObject->TOUCH_ARCHIVE == 1 || $link['has_archive'] === false) && $link['permanent_dead'] === false) || $invalidEntry === true) && $link['link_type'] != "x";
+				//DEAD_ONLY = 0; Modify ALL links clearance flag
+				$dead0 = $this->commObject->DEAD_ONLY == 0 && !($link['tagged_dead'] === true && $link['is_dead'] === false && $this->commObject->TAG_OVERRIDE == 0);
+				//DEAD_ONLY = 1; Modify only tagged links clearance flag
+				$dead1 = $this->commObject->DEAD_ONLY == 1 && ($link['tagged_dead'] === true && ($link['is_dead'] === true || $this->commObject->TAG_OVERRIDE == 1));
+				//DEAD_ONLY = 2; Modify all dead links clearance flag
+				$dead2 = $this->commObject->DEAD_ONLY == 2 && (($link['tagged_dead'] === true && $this->commObject->TAG_OVERRIDE == 1) || $link['is_dead'] === true);
+
+				if( $reference === true && ( $link['is_dead'] !== true && $link['tagged_dead'] !== true ) && $this->commObject->ARCHIVE_ALIVE == 1 && !$checkResponse["$tid:$id"] ) {
+					$toArchive["$tid:$id"] = $link['url'];
+				} elseif( $reference === false && ( $link['is_dead'] !== true && $link['tagged_dead'] !== true ) && $this->commObject->ARCHIVE_ALIVE == 1 && !$checkResponse[$tid] ) {
+					$toArchive[$tid] = $link['url'];
+				}
+				if( ($linkRescueClearance === true && ($dead0 === true || $dead1 === true || $dead2 === true)) || $invalidEntry === true ) {
+					if( $reference === false ) $toFetch[$tid] = array( $link['url'], ( $this->commObject->ARCHIVE_BY_ACCESSDATE == 1 ? ( $link['access_time'] != "x" ? $link['access_time'] : null ) : null ) );
+					else $toFetch["$tid:$id"] = array( $link['url'], ( $this->commObject->ARCHIVE_BY_ACCESSDATE == 1 ? ( $link['access_time'] != "x" ? $link['access_time'] : null ) : null ) );
+				}
+			} while( $reference === true && isset( $links[$tid]['reference'][++$id] ) );
+
+		}
+		$errors = array();
+		if( !empty( $toArchive ) ) {
+			$archiveResponse = $this->commObject->requestArchive( $toArchive );
+			$errors = $archiveResponse['errors'];
+			$archiveResponse = $archiveResponse['result'];
+		}
+		if( !empty( $toFetch ) ) {
+			$fetchResponse = $this->commObject->retrieveArchive( $toFetch );
+			$fetchResponse = $fetchResponse['result'];
+		}
+		foreach( $links as $tid=>$link ) {
+			if( $link['link_type'] == "reference" ) $reference = true;
+			else $reference = false;
+			$id = 0;
+			do {
+				if( $reference === true ) $link = $links[$tid]['reference'][$id];
+				else $link = $link[$link['link_type']];
+				if( isset( $link['ignore'] ) && $link['ignore'] === true ) break;
+
+				//Create a flag that marks the source as being improperly formatting and needing fixing
+				$invalidEntry = (( $link['has_archive'] === true && $link['archive_type'] == "invalid" ) || ( $link['tagged_dead'] === true && $link['tag_type'] == "invalid" )) && $link['link_type'] != "x";
+				//Create a flag that determines basic clearance to edit a source.
+				$linkRescueClearance = ((($this->commObject->TOUCH_ARCHIVE == 1 || $link['has_archive'] === false) && $link['permanent_dead'] === false) || $invalidEntry === true) && $link['link_type'] != "x";
+				//DEAD_ONLY = 0; Modify ALL links clearance flag
+				$dead0 = $this->commObject->DEAD_ONLY == 0 && !($link['tagged_dead'] === true && $link['is_dead'] === false && $this->commObject->TAG_OVERRIDE == 0);
+				//DEAD_ONLY = 1; Modify only tagged links clearance flag
+				$dead1 = $this->commObject->DEAD_ONLY == 1 && ($link['tagged_dead'] === true && ($link['is_dead'] === true || $this->commObject->TAG_OVERRIDE == 1));
+				//DEAD_ONLY = 2; Modify all dead links clearance flag
+				$dead2 = $this->commObject->DEAD_ONLY == 2 && (($link['tagged_dead'] === true && $this->commObject->TAG_OVERRIDE == 1) || $link['is_dead'] === true);
+				//Tag remove clearance flag
+				$tagremoveClearance = $link['tagged_dead'] === true && $link['is_dead'] === false && $this->commObject->TAG_OVERRIDE == 0;
+
+				if( $reference === true && ( $link['is_dead'] !== true && $link['tagged_dead'] !== true ) && $this->commObject->ARCHIVE_ALIVE == 1 && !$checkResponse["$tid:$id"] ) {
+					if( $archiveResponse["$tid:$id"] === true ) {
+						$archived++;
+					} elseif( $archiveResponse["$tid:$id"] === false ) {
+						$archiveProblems["$tid:$id"] = $link['url'];
+					}
+				} elseif( $reference === false && ( $link['is_dead'] !== true && $link['tagged_dead'] !== true ) && $this->commObject->ARCHIVE_ALIVE == 1 && !$checkResponse[$tid] ) {
+					if( $archiveResponse[$tid] === true ) {
+						$archived++;
+					} elseif( $archiveResponse[$tid] === false ) {
+						$archiveProblems[$tid] = $link['url'];
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 					}
 
 					if( $i >= 1 && ($linkRescueClearance === true && ($dead0 === true || $dead1 === true || $dead2 === true)) || $invalidEntry === true ) {
@@ -232,6 +336,7 @@ abstract class Parser {
 					//Yes, this is ridiculously convoluted but this is the only makeshift str_replace expression I could come up with the offset start and limit support.
 					$newtext = str_replace( substr( $newtext, $links[$tid][$links[$tid]['link_type']]['offset'] ), preg_replace( '/'.preg_quote( $links[$tid]['string'], '/' ).'/', $links[$tid]['newstring'], substr( $newtext, $links[$tid][$links[$tid]['link_type']]['offset'] ), 1 ), $newtext );
 				}
+<<<<<<< HEAD
 			}
 
 			//Check if archives exist for the provided URLs
@@ -251,6 +356,15 @@ abstract class Parser {
 			if( $i == 1 && !empty( $toFetch ) ) {
 				$fetchResponse = $this->commObject->retrieveArchive( $toFetch );
 				$fetchResponse = $fetchResponse['result'];
+=======
+				if( $reference === true ) $links[$tid]['reference'][$id] = $link;
+				else $links[$tid][$links[$tid]['link_type']] = $link;
+			} while( $reference === true && isset( $links[$tid]['reference'][++$id] ) );
+
+			if( Parser::newIsNew( $links[$tid] ) ) {
+				$links[$tid]['newstring'] = $this->generateString( $links[$tid] );
+				$newtext = str_replace( $links[$tid]['string'], $links[$tid]['newstring'], $newtext );
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 			}
 		}
 
@@ -267,10 +381,17 @@ abstract class Parser {
 				$magicwords = array();
 				$magicwords['problem'] = $problem;
 				$magicwords['error'] = $errors[$id];
+<<<<<<< HEAD
 				$out .= "* ".$this->commObject->getConfigText( "plerror", $magicwords )."\n";
 			}
 			$body = $this->commObject->getConfigText( "talk_error_message", array( 'problematiclinks' => $out ) )."~~~~";
 			API::edit( "Talk:{$this->commObject->page}", $body, $this->commObject->getConfigText( "errortalkeditsummary", array() ), false, true, "new", $this->commObject->getConfigText( "talk_error_message_header", array() ) );
+=======
+				$out .= "* ".$this->commObject->getConfigText( "PLERROR", $magicwords )."\n";
+			}
+			$body = $this->commObject->getConfigText( "TALK_ERROR_MESSAGE", array( 'problematiclinks' => $out ) )."~~~~";
+			API::edit( "Talk:{$this->commObject->page}", $body, $this->commObject->getConfigText( "ERRORTALKEDITSUMMARY", array() ), false, true, "new", $this->commObject->getConfigText( "TALK_ERROR_MESSAGE_HEADER", array() ) );
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 		}
 		$pageModified = false;
 		//This is the courtesy message left behind when it edits the main article.
@@ -373,7 +494,11 @@ abstract class Parser {
 		$returnArray['permanent_dead'] = false;
 
 		//Check if there are tags flagging the bot to ignore the source
+<<<<<<< HEAD
 		if( preg_match( $this->fetchTemplateRegex( $this->commObject->config['ignore_tags'] ), $remainder, $params ) || preg_match( $this->fetchTemplateRegex( $this->commObject->config['ignore_tags'] ), $linkString, $params ) ) {
+=======
+		if( preg_match( $this->fetchTemplateRegex( $this->commObject->IGNORE_TAGS ), $remainder, $params ) || preg_match( $this->fetchTemplateRegex( $this->commObject->IGNORE_TAGS ), $linkString, $params ) ) {
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 			return array( 'ignore' => true );
 		}
 		if( !preg_match( $this->fetchTemplateRegex( $this->commObject->config['citation_tags'], false ), $linkString, $params ) && preg_match( '/((?:https?:|ftp:)?\/\/([!#$&-;=?-Z_a-z~]|%[0-9a-f]{2})+)/i', $linkString, $params ) ) {
@@ -455,6 +580,7 @@ abstract class Parser {
 	 */
 	protected abstract function generateNewArchiveTemplate( &$link, &$temp );
 
+<<<<<<< HEAD
 	/**
 	 * Generates an appropriate citation template without altering existing parameters.
 	 *
@@ -469,6 +595,8 @@ abstract class Parser {
 	 */
 	protected abstract function generateNewCitationTemplate(&$link, &$temp );
 
+=======
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 	/**
 	* Look for stored access times in the DB, or update the DB with a new access time
 	* Adds access time to the link details.
@@ -514,12 +642,12 @@ abstract class Parser {
 		foreach( $links as $tid => $link ) {
 			if( ( $this->commObject->config['touch_archive'] == 1 || $link['has_archive'] === false || isset( $link['invalid_archive'] ) ) && $this->commObject->config['verify_dead'] == 1 && $this->commObject->db->dbValues[$tid]['live_state'] !== 0 && $this->commObject->db->dbValues[$tid]['live_state'] !== 5 && (time() - $this->commObject->db->dbValues[$tid]['last_deadCheck'] > 259200) ) $toCheck[$tid] = $link['url'];
 		}
-		$results = $this->deadCheck->checkDeadlinks( $toCheck );
-		$results = $results['results'];
+		$results = $this->deadCheck->areLinksDead( $toCheck );
 		foreach( $links as $tid => $link ) {
 			$link['is_dead'] = null;
 			if( ( $this->commObject->config['touch_archive'] == 1 || $link['has_archive'] === false || isset( $link['invalid_archive'] ) ) && $this->commObject->config['verify_dead'] == 1 ) {
 				if( $this->commObject->db->dbValues[$tid]['live_state'] != 0 && $this->commObject->db->dbValues[$tid]['live_state'] != 5 && (time() - $this->commObject->db->dbValues[$tid]['last_deadCheck'] > 259200) ) {
+<<<<<<< HEAD
 					$link['is_dead'] = $results[$tid];
 					$this->commObject->db->dbValues[$tid]['last_deadCheck'] = time();
 					if( $link['tagged_dead'] === false && $link['is_dead'] === true && !isset( $link['invalid_archive'] ) ) {
@@ -527,6 +655,15 @@ abstract class Parser {
 					} elseif( $link['tagged_dead'] === false && $link['is_dead'] === false && $this->commObject->db->dbValues[$tid]['live_state'] != 3 ) {
 						$this->commObject->db->dbValues[$tid]['live_state'] = 3;
 					} elseif( ( $link['tagged_dead'] === true || isset( $link['invalid_archive'] ) ) && ( $this->commObject->config['tag_override'] == 1 || $link['is_dead'] === true ) ) {
+=======
+					$link['is_dead'] = $results[$link['url']];
+					$this->commObject->db->dbValues[$tid]['last_deadCheck'] = time();
+					if( $link['tagged_dead'] === false && $link['is_dead'] === true ) {
+						$this->commObject->db->dbValues[$tid]['live_state']--;
+					} elseif( $link['tagged_dead'] === false && $link['is_dead'] === false && $this->commObject->db->dbValues[$tid]['live_state'] != 3 ) {
+						$this->commObject->db->dbValues[$tid]['live_state'] = 3;
+					} elseif( $link['tagged_dead'] === true && ( $this->commObject->TAG_OVERRIDE == 1 || $link['is_dead'] === true ) ) {
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 						$this->commObject->db->dbValues[$tid]['live_state'] = 0;
 					} else {
 						$this->commObject->db->dbValues[$tid]['live_state'] = 3;
@@ -599,7 +736,10 @@ abstract class Parser {
 				if( $lend !== false && $tend !== false ) $offset = min( array( $tend, $lend ) ) + 1;
 				elseif( $lend === false ) $offset = $tend + 1;
 				else $offset = $lend + 1;
+<<<<<<< HEAD
 				//Make sure we're not inside an embedded wikilink or template.
+=======
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 				while( ( $tstart < $pipepos && $tend > $pipepos ) || ( $lstart < $pipepos && $lend > $pipepos ) ) $pipepos = strpos( $templateString, "|", $pipepos + 1 );
 				$tstart = strpos( $templateString, "{{", $offset );
 				$tend = strpos( $templateString, "}}", $offset );
@@ -808,11 +948,15 @@ abstract class Parser {
 						$this->commObject->db->retrieveDBValues( $returnArray[$tid]['reference'][$id], "$tid:".($id-$indexOffset) );
 						$toCheck["$tid:".($id-$indexOffset)] = $returnArray[$tid]['reference'][$id];
 						$lastLink['tid'] = $tid;
+<<<<<<< HEAD
 						$lastLink['id'] = $id-$indexOffset;
 						if( $indexOffset !== 0 ) {
 							$returnArray[$tid]['reference'][$id-$indexOffset] = $returnArray[$tid]['reference'][$id];
 							unset( $returnArray[$tid]['reference'][$id] );
 						}
+=======
+						$lastLink['id'] = $id;
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 					}
 				} else {
 					$currentLink['tid'] = $tid;
@@ -1030,6 +1174,7 @@ abstract class Parser {
 	*/
 	protected function getNonReference( &$scrapText = "" ) {
 		$returnArray = array();
+<<<<<<< HEAD
 		$tArray = array_merge( $this->commObject->config['deadlink_tags'], $this->commObject->config['archive_tags'], $this->commObject->config['ignore_tags'], $this->commObject->config['ic_tags'], $this->commObject->config['paywall_tags'] );
 		//This is a giant regex to capture citation tags and the other tags that follow it.
 		$regex = '/(('.str_replace( "\}\}", "", implode( '|', $this->commObject->config['citation_tags'] ) ).')[\s\n]*\|([\n\s\S]*?(\{\{[\s\S\n]*?\}\}[\s\S\n]*?)*?)\}\})\s*?((\s*('.str_replace( "\}\}", "", implode( '|', $tArray ) ).')[\s\n]*(?:\|([\n\s\S]*?(\{\{[\s\S\n]*?\}\}[\s\S\n]*?)*?))?\}\})*)/i';
@@ -1063,6 +1208,17 @@ abstract class Parser {
 			//remove the match for the next run through.
 			//We need preg_replace since it has a limiter whereas str_replace does not.
 			$scrapText = preg_replace( '/'.preg_quote( $returnArray['string'], '/' ).'/', "", $scrapText, 1 );
+=======
+		$tArray = array_merge( $this->commObject->DEADLINK_TAGS, $this->commObject->ARCHIVE_TAGS, $this->commObject->IGNORE_TAGS, $this->commObject->IC_TAGS, $this->commObject->PAYWALL_TAGS );
+		$regex = '/(('.str_replace( "\}\}", "", implode( '|', $this->commObject->CITATION_TAGS ) ).')[\s\n]*\|([\n\s\S]*?(\{\{[\s\S\n]*?\}\}[\s\S\n]*?)*?)\}\})\s*?((\s*('.str_replace( "\}\}", "", implode( '|', $tArray ) ).')[\s\n]*(?:\|([\n\s\S]*?(\{\{[\s\S\n]*\}\}[\s\S\n]*?)*?))?\}\})*)/i';
+		if( preg_match( $regex, $scrapText, $match ) ) {
+			$returnArray['string'] = $match[0];
+			$returnArray['link_string'] = $match[1];
+			$returnArray['remainder'] = $match[5];
+			$returnArray['type'] = "template";
+			$returnArray['name'] = str_replace( "{{", "", $match[2] );
+			$scrapText = str_replace( $returnArray['string'], "", $scrapText );
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 			return $returnArray;
 		}
 		//If we matched a bare link first, then...
@@ -1360,7 +1516,10 @@ abstract class Parser {
 	/**
 	* Get page date formatting standard
 	*
+<<<<<<< HEAD
 	* @param bool $default Return default format.
+=======
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 	* @access protected
 	* @abstract
 	* @author Maximilian Doerr (Cyberpower678)
@@ -1368,8 +1527,13 @@ abstract class Parser {
 	* @copyright Copyright (c) 2016, Maximilian Doerr
 	* @return string Format to be fed in time()
 	*/
+<<<<<<< HEAD
 	protected abstract function retrieveDateFormat( $default = false );
-	
+
+=======
+	protected abstract function retrieveDateFormat();
+
+>>>>>>> bd4b445... Update IABot to use Deadlink checker library
 	/**
 	* Analyze the citation template
 	*
