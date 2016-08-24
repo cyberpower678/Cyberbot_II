@@ -34,8 +34,6 @@
 * @license https://www.gnu.org/licenses/gpl.txt
 * @copyright Copyright (c) 2016, Maximilian Doerr
 */
-require __DIR__ . '/../../vendor/autoload.php';
-use Wikimedia\DeadlinkChecker\CheckIfDead;
 
 abstract class Parser {
 

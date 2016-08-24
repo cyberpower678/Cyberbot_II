@@ -1,7 +1,7 @@
 <?php
 
 require_once dirname( __FILE__ ) . '/../../IABot/Parser/parse.php';
-require_once dirname(__FILE__) . '/../../IABot/checkIfDead.php';
+require_once dirname(__FILE__) . '/../../vendor/autoload.php';
 
 class parseTest extends PHPUnit_Framework_TestCase {
 
