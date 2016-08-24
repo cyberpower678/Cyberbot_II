@@ -1,0 +1,11 @@
+{
+  "require": {
+    "Niharika29/DeadlinkChecker": "dev-master"
+  },
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/Niharika29/DeadlinkChecker"
+    }
+  ]
+}

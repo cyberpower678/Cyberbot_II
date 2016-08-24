@@ -1,6 +1,6 @@
-<?php 
+<?php
 	//Create a file in the same directory as this on named deadlink.config.local.inc.php and copy the stuff below.
-	
+
 	//Activate this to run the bot on a specific page(s) for debugging purposes.
 	$debug = false;
 	$limitedRun = false;
@@ -15,13 +15,13 @@
 	$multithread = false;
 	$workers = false;
 	$workerLimit = 3;
-	
+
 	//Set Wiki to run on, define this before this gets called, to run on a different wiki.
 	if( !defined( 'WIKIPEDIA' ) ) define( 'WIKIPEDIA', "enwiki" );
-	
+
 	//Progress memory file.  This allows the bot to resume where it left off in the event of a shutdown or a crash.
 	$memoryFile = "";
-	
+
 	//Wiki connection setup.  Uses the defined constant WIKIPEDIA.
 	switch( WIKIPEDIA ) {
 		default:
@@ -38,42 +38,42 @@
 		$nobots = false;
 		break;
 	}
-	
+
 	//Log central API
 	$enableAPILogging = false;
 	$apiCall = "";
 	$expectedValue = true;
 	$decodeFunction = 'unserialize'; 		//Either json_decode or unserialize
-	
+
 	//IA Error Mailing List
 	$enableMail = false;
 	$to = "";
 	$from = "";
-	
+
 	//DB connection setup
 	$host = "";
 	$port = "";
 	$user = "";
 	$pass = "";
 	$db = "";
-	
+
 	//Wikipedia DB setup
 	$useWikiDB = false;
 	$wikihost = "";
 	$wikiport = "";
 	$wikiuser = "";
 	$wikipass = "";
-	$wikidb = ""; 
+	$wikidb = "";
 	$revisiontable = "";
 	$texttable = "";
-	
+
 	//Don't copy any of this below.
 	if( file_exists( dirname(__FILE__).DIRECTORY_SEPARATOR.'deadlink.config.local.inc.php' ) ) require_once( 'deadlink.config.local.inc.php' );
 	require_once( 'API.php' );
 	if( $multithread || $workers ) require_once( 'thread.php' );
 	require_once( 'Parser/parse.php' );
 	require_once( 'DB.php' );
-	require_once( 'checkIfDead.php');
+	use Wikimedia\DeadlinkChecker\CheckIfDead;
 	if( file_exists( dirname(__FILE__).DIRECTORY_SEPARATOR.'Parser/'.WIKIPEDIA.'.php' ) ) {
 		require_once( 'Parser/'.WIKIPEDIA.'.php' );
 		define( 'PARSERCLASS', WIKIPEDIA.'Parser' );
