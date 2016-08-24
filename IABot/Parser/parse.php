@@ -132,7 +132,7 @@ abstract class Parser {
 		$history = array();
 		$newtext = $this->commObject->content;
 
-		if( $this->commObject->LINK_SCAN == 0 ) $links = $this->getExternalLinks();
+		if( $this->commObject->config['link_scan'] == 0 ) $links = $this->getExternalLinks();
 		else $links = $this->getReferences();
 		$analyzed = $links['count'];
 		unset( $links['count'] );
@@ -524,11 +524,11 @@ abstract class Parser {
 				if( $this->commObject->db->dbValues[$tid]['live_state'] != 0 && $this->commObject->db->dbValues[$tid]['live_state'] != 5 && (time() - $this->commObject->db->dbValues[$tid]['last_deadCheck'] > 259200) ) {
 					$link['is_dead'] = $results[$link['url']];
 					$this->commObject->db->dbValues[$tid]['last_deadCheck'] = time();
-					if( $link['tagged_dead'] === false && $link['is_dead'] === true ) {
+					if( $link['tagged_dead'] === false && $link['is_dead'] === true  && !isset( $link['invalid_archive'] ) ) {
 						$this->commObject->db->dbValues[$tid]['live_state']--;
 					} elseif( $link['tagged_dead'] === false && $link['is_dead'] === false && $this->commObject->db->dbValues[$tid]['live_state'] != 3 ) {
 						$this->commObject->db->dbValues[$tid]['live_state'] = 3;
-					} elseif( $link['tagged_dead'] === true && ( $this->commObject->TAG_OVERRIDE == 1 || $link['is_dead'] === true ) ) {
+					} elseif( ( $link['tagged_dead'] === true || isset( $link['invalid_archive'] ) ) && ( $this->commObject->config['tag_override'] == 1 || $link['is_dead'] === true ) ) {
 						$this->commObject->db->dbValues[$tid]['live_state'] = 0;
 					} else {
 						$this->commObject->db->dbValues[$tid]['live_state'] = 3;
@@ -810,6 +810,7 @@ abstract class Parser {
 						$this->commObject->db->retrieveDBValues( $returnArray[$tid]['reference'][$id], "$tid:".($id-$indexOffset) );
 						$toCheck["$tid:".($id-$indexOffset)] = $returnArray[$tid]['reference'][$id];
 						$lastLink['tid'] = $tid;
+						$lastLink['id'] = $id-$indexOffset;
 						if( $indexOffset !== 0 ) {
 							$returnArray[$tid]['reference'][$id-$indexOffset] = $returnArray[$tid]['reference'][$id];
 							unset( $returnArray[$tid]['reference'][$id] );
