@@ -13,12 +13,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Niharika29/DeadlinkChecker.git",
-                "reference": "4c55212669091dada1ca1ba95b7656b950274e1f"
+                "reference": "9e4e86bd375afdec4dcda7d98cdcd1e1d9324ce3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Niharika29/DeadlinkChecker/zipball/4c55212669091dada1ca1ba95b7656b950274e1f",
-                "reference": "4c55212669091dada1ca1ba95b7656b950274e1f",
+                "url": "https://api.github.com/repos/Niharika29/DeadlinkChecker/zipball/9e4e86bd375afdec4dcda7d98cdcd1e1d9324ce3",
+                "reference": "9e4e86bd375afdec4dcda7d98cdcd1e1d9324ce3",
                 "shasum": ""
             },
             "require": {
@@ -73,7 +73,7 @@
                 "source": "https://github.com/Niharika29/DeadlinkChecker/tree/master",
                 "issues": "https://github.com/Niharika29/DeadlinkChecker/issues"
             },
-            "time": "2016-08-16 18:12:54"
+            "time": "2016-08-31 21:00:40"
         }
     ],
     "packages-dev": [],
