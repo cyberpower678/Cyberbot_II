@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "hash": "70b82c7094bea2eecb2efd66a0401003",
+    "hash": "5e965ee6ee916e51aa34d6b9c90148f2",
     "content-hash": "e94e47500e7dd4dfe80a98a21110f484",
     "packages": [
         {
@@ -12,13 +12,13 @@
             "version": "dev-master",
             "source": {
                 "type": "git",
-                "url": "https://github.com/Niharika29/DeadlinkChecker.git",
-                "reference": "9e4e86bd375afdec4dcda7d98cdcd1e1d9324ce3"
+                "url": "https://github.com/wikimedia/DeadlinkChecker.git",
+                "reference": "caa3e424d64c3da2808302ac05d047ca2604bb02"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Niharika29/DeadlinkChecker/zipball/9e4e86bd375afdec4dcda7d98cdcd1e1d9324ce3",
-                "reference": "9e4e86bd375afdec4dcda7d98cdcd1e1d9324ce3",
+                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/caa3e424d64c3da2808302ac05d047ca2604bb02",
+                "reference": "caa3e424d64c3da2808302ac05d047ca2604bb02",
                 "shasum": ""
             },
             "require": {
@@ -70,10 +70,10 @@
                 "link"
             ],
             "support": {
-                "source": "https://github.com/Niharika29/DeadlinkChecker/tree/master",
-                "issues": "https://github.com/Niharika29/DeadlinkChecker/issues"
+                "source": "https://github.com/wikimedia/DeadlinkChecker/tree/master",
+                "issues": "https://github.com/wikimedia/DeadlinkChecker/issues"
             },
-            "time": "2016-08-31 21:00:40"
+            "time": "2016-09-07 17:34:39"
         }
     ],
     "packages-dev": [],
