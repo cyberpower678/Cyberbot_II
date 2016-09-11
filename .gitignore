@@ -221,6 +221,7 @@ database.inc
 dlaa
 dlaan
 deadlink.config.local.inc.php
+config.php
 .idea
 
 vendor/*
