@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "hash": "5e965ee6ee916e51aa34d6b9c90148f2",
+    "hash": "70b82c7094bea2eecb2efd66a0401003",
     "content-hash": "e94e47500e7dd4dfe80a98a21110f484",
     "packages": [
         {
@@ -13,18 +13,21 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/wikimedia/DeadlinkChecker.git",
-                "reference": "caa3e424d64c3da2808302ac05d047ca2604bb02"
+                "reference": "74446a55a361886141c9b26e5f22d7c5ae07cb94"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/caa3e424d64c3da2808302ac05d047ca2604bb02",
-                "reference": "caa3e424d64c3da2808302ac05d047ca2604bb02",
+                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/74446a55a361886141c9b26e5f22d7c5ae07cb94",
+                "reference": "74446a55a361886141c9b26e5f22d7c5ae07cb94",
                 "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
                 "lib-curl": ">=7.15.1",
                 "php": ">=5.5.9"
+            },
+            "replace": {
+                "niharika29/deadlinkchecker": "*"
             },
             "require-dev": {
                 "jakub-onderka/php-parallel-lint": "~0.8",
@@ -37,19 +40,9 @@
                     "Wikimedia\\DeadlinkChecker\\": "src/"
                 }
             },
-            "scripts": {
-                "fix": [
-                    "phpcbf"
-                ],
-                "test": [
-                    "composer validate --no-interaction",
-                    "parallel-lint . --exclude vendor",
-                    "phpunit",
-                    "phpcs -p"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
-                "MIT"
+                "GPL-3+"
             ],
             "authors": [
                 {
@@ -64,16 +57,12 @@
                 }
             ],
             "description": "Library for checking if a given link is dead or alive",
-            "homepage": "https://github.com/Niharika29/DeadlinkChecker",
+            "homepage": "https://www.mediawiki.org/wiki/DeadlinkChecker",
             "keywords": [
                 "deadlink",
                 "link"
             ],
-            "support": {
-                "source": "https://github.com/wikimedia/DeadlinkChecker/tree/master",
-                "issues": "https://github.com/wikimedia/DeadlinkChecker/issues"
-            },
-            "time": "2016-09-07 17:34:39"
+            "time": "2016-11-10 18:02:48"
         }
     ],
     "packages-dev": [],
