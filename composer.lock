@@ -13,12 +13,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/wikimedia/DeadlinkChecker.git",
-                "reference": "55c11450d9b82ad17833360c35b2c724eee9c86e"
+                "reference": "712e93af3326d05e83500ae12faf346b1a2139b7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/55c11450d9b82ad17833360c35b2c724eee9c86e",
-                "reference": "55c11450d9b82ad17833360c35b2c724eee9c86e",
+                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/712e93af3326d05e83500ae12faf346b1a2139b7",
+                "reference": "712e93af3326d05e83500ae12faf346b1a2139b7",
                 "shasum": ""
             },
             "require": {
@@ -62,7 +62,7 @@
                 "deadlink",
                 "link"
             ],
-            "time": "2016-12-24 17:56:38"
+            "time": "2017-01-02 12:41:15"
         }
     ],
     "packages-dev": [],
