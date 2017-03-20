@@ -4,21 +4,21 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "hash": "70b82c7094bea2eecb2efd66a0401003",
-    "content-hash": "e94e47500e7dd4dfe80a98a21110f484",
+    "hash": "18a9fedfcc76c6d9a83ec0ceaccd232d",
+    "content-hash": "3f7debfa6d86cdb76a81002c2314a4b7",
     "packages": [
         {
-            "name": "niharika29/deadlinkchecker",
+            "name": "wikimedia/deadlinkchecker",
             "version": "dev-master",
             "source": {
                 "type": "git",
                 "url": "https://github.com/wikimedia/DeadlinkChecker.git",
-                "reference": "712e93af3326d05e83500ae12faf346b1a2139b7"
+                "reference": "7d9cba6dbcb983fb0fbf19d0e4ea852dfe2e389f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/712e93af3326d05e83500ae12faf346b1a2139b7",
-                "reference": "712e93af3326d05e83500ae12faf346b1a2139b7",
+                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/7d9cba6dbcb983fb0fbf19d0e4ea852dfe2e389f",
+                "reference": "7d9cba6dbcb983fb0fbf19d0e4ea852dfe2e389f",
                 "shasum": ""
             },
             "require": {
@@ -40,7 +40,17 @@
                     "Wikimedia\\DeadlinkChecker\\": "src/"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
+            "scripts": {
+                "fix": [
+                    "phpcbf"
+                ],
+                "test": [
+                    "composer validate --no-interaction",
+                    "parallel-lint . --exclude vendor",
+                    "phpunit",
+                    "phpcs -p"
+                ]
+            },
             "license": [
                 "GPL-3+"
             ],
@@ -62,14 +72,18 @@
                 "deadlink",
                 "link"
             ],
-            "time": "2017-01-02 12:41:15"
+            "support": {
+                "source": "https://github.com/wikimedia/DeadlinkChecker/tree/master",
+                "issues": "https://github.com/wikimedia/DeadlinkChecker/issues"
+            },
+            "time": "2017-03-19 21:10:26"
         }
     ],
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
-        "niharika29/deadlinkchecker": 20
+        "wikimedia/deadlinkchecker": 20
     },
     "prefer-stable": false,
     "prefer-lowest": false,
