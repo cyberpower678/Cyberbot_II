@@ -227,3 +227,5 @@ testSession*
 composer*
 
 vendor/*
+
+IABot/TranslationTable.php
