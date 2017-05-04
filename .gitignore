@@ -223,5 +223,9 @@ dlaan
 deadlink.config.local.inc.php
 config.php
 .idea
+testSession*
+composer*
 
 vendor/*
+
+IABot/TranslationTable.php
