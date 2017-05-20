@@ -231,5 +231,4 @@ vendor/*
 IABot/TranslationTable.php
 *.DS_Store
 IABot/www/static/slate/._js
-IABot/test.php
-
+test.php
