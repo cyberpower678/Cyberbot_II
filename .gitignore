@@ -234,3 +234,9 @@ IABot/www/static/slate/._js
 test.php
 IABot/InternetArchiveBotspecieswikiInternetArchiveBot
 IABot/InternetArchiveBotzhwikiInternetArchiveBot
+
+IABot/generateCiteList.php
+
+IABot/InternetArchiveBotnlwikiInternetArchiveBot
+
+IABot/InternetArchiveBotnowikiInternetArchiveBot
