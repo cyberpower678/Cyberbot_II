@@ -1,6 +1,7 @@
 {
   "require": {
-    "wikimedia/deadlinkchecker": "dev-master"
+    "wikimedia/deadlinkchecker": "dev-master",
+    "neitanod/forceutf8": "dev-master"
   },
   "repositories": [
     {
