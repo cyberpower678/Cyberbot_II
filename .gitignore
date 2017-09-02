@@ -240,3 +240,13 @@ IABot/generateCiteList.php
 IABot/InternetArchiveBotnlwikiInternetArchiveBot
 
 IABot/InternetArchiveBotnowikiInternetArchiveBot
+
+IABot/sessions.config.local.inc.php
+
+IABot/InternetArchiveBoteswikiInternetArchiveBot
+
+IABot/InternetArchiveBotfrwikiInternetArchiveBot
+
+IABot/InternetArchiveBotjawikiInternetArchiveBot
+
+IABot/accessConfig.php

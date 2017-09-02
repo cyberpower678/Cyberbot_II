@@ -47,12 +47,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/wikimedia/DeadlinkChecker.git",
-                "reference": "a34eea3f0a8141fc6b30cd4424a0befac1c312b0"
+                "reference": "8e04ee182dded0381a48d1347104a6bfb1a82e7e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/a34eea3f0a8141fc6b30cd4424a0befac1c312b0",
-                "reference": "a34eea3f0a8141fc6b30cd4424a0befac1c312b0",
+                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/8e04ee182dded0381a48d1347104a6bfb1a82e7e",
+                "reference": "8e04ee182dded0381a48d1347104a6bfb1a82e7e",
                 "shasum": ""
             },
             "require": {
@@ -107,10 +107,10 @@
                 "link"
             ],
             "support": {
-                "source": "https://github.com/wikimedia/DeadlinkChecker/tree/v1.3",
+                "source": "https://github.com/wikimedia/DeadlinkChecker/tree/master",
                 "issues": "https://github.com/wikimedia/DeadlinkChecker/issues"
             },
-            "time": "2017-06-04 16:15:52"
+            "time": "2017-08-24 18:25:18"
         }
     ],
     "packages-dev": [],
