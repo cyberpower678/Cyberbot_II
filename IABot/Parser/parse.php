@@ -227,7 +227,8 @@ abstract class Parser {
 					if( isset( $link['ignore'] ) && $link['ignore'] === true ) break;
 
 					//Create a flag that marks the source as being improperly formatting and needing fixing
-					$invalidEntry = ( ( $link['has_archive'] === true && ( $link['archive_type'] == "invalid" ||
+					$invalidEntry = ( ( $link['has_archive'] === true && ( ( $link['archive_type'] == "invalid" &&
+					                                                         !isset( $link['ignore_iarchive_flag'] ) ) ||
 					                                                       ( $this->commObject->config['convert_archives'] ==
 					                                                         1 &&
 					                                                         isset( $link['convert_archive_url'] ) &&
@@ -1370,6 +1371,8 @@ abstract class Parser {
 				$this->deadCheck->sanitizeURL( $returnArray['url'], true );
 			//If the sanitizer can't handle the URL, ignore the reference to prevent a garbage edit.
 			if( $returnArray['url'] == "https:///" ) return [ 'ignore' => true ];
+			if( $returnArray['url'] == "https://''/" ) return [ 'ignore' => true ];
+			if( $returnArray['url'] == "http://''/" ) return [ 'ignore' => true ];
 			if( isset( $match[1] ) ) {
 				$returnArray['fragment'] = $match[1];
 			} else $returnArray['fragment'] = null;
@@ -1859,6 +1862,7 @@ abstract class Parser {
 				}
 			}
 			if( !empty( $toValidate ) ) foreach( explode( "\n", CIDSERVERS ) as $server ) {
+				if( empty( $toValidate ) ) break;
 				$serverResults = API::runCIDServer( $server, $toValidate );
 				$toValidate = array_flip( $toValidate );
 				foreach( $serverResults['results'] as $surl => $sResult ) {
@@ -1933,7 +1937,7 @@ abstract class Parser {
 					$link['is_dead'] = false;
 				}
 				if( ( $this->commObject->db->dbValues[$tid]['paywall_status'] == 2 ||
-				      isset( $link['invalid_archive'] ) ) ||
+				      ( isset( $link['invalid_archive'] ) && !isset( $link['ignore_iarchive_flag'] ) ) ) ||
 				    ( $this->commObject->config['tag_override'] == 1 && $link['tagged_dead'] === true )
 				) {
 					$link['is_dead'] = true;
@@ -2048,7 +2052,7 @@ abstract class Parser {
 				$link['link_type'] = "template";
 			} elseif( $link['link_type'] != "stray" ) {
 				if( $link['is_archive'] === false && $this->generateNewArchiveTemplate( $link, $temp ) ) {
-					$link['newdata']['archive_type'] = "template";
+					if( empty( $link['newdata']['archive_type'] ) ) $link['newdata']['archive_type'] = "template";
 					$link['newdata']['tagged_dead'] = false;
 					$link['newdata']['is_archive'] = false;
 				} else {
@@ -2239,7 +2243,9 @@ abstract class Parser {
 		if( $link['link_type'] != "reference" ) {
 			if( strpos( $link[$link['link_type']]['link_string'], "\n" ) !== false ) $multiline = true;
 			$mArray = Parser::mergeNewData( $link[$link['link_type']] );
-			$tArray =
+			if( isset( $link[$link['link_type']]['redundant_archives'] ) ) $tArray =
+				array_merge( $this->commObject->config['deadlink_tags'], $this->commObject->config['ignore_tags'] );
+			else $tArray =
 				array_merge( $this->commObject->config['deadlink_tags'], $this->commObject->config['archive_tags'],
 				             $this->commObject->config['ignore_tags']
 				);
@@ -2279,7 +2285,9 @@ abstract class Parser {
 				if( !is_int( $tid ) ) continue;
 				//Merge the newdata index with the link array.
 				$mArray = Parser::mergeNewData( $tlink );
-				$tArray =
+				if( isset( $tlink['redundant_archives'] ) ) $tArray =
+					array_merge( $this->commObject->config['deadlink_tags'], $this->commObject->config['ignore_tags'] );
+				else $tArray =
 					array_merge( $this->commObject->config['deadlink_tags'], $this->commObject->config['archive_tags'],
 					             $this->commObject->config['ignore_tags']
 					);
@@ -2305,10 +2313,19 @@ abstract class Parser {
 				elseif( $mArray['link_type'] == "template" ) {
 					//Build a clean cite template with the set parameters.
 					$ttout .= "{{" . $mArray['link_template']['name'];
-					$ttout .= substr( $mArray['link_template']['format'],
-					                  strpos( $mArray['link_template']['format'], "{value}" ) + 7
+					if( $mArray['link_template']['format'] == "multiline-pretty" ) $ttout .= "\n";
+					else $ttout .= substr( $mArray['link_template']['format'],
+					                       strpos( $mArray['link_template']['format'], "{value}" ) + 7
 					);
-					foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
+					if( $mArray['link_template']['format'] == "multiline-pretty" ) {
+						$strlen = 0;
+						foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
+							$strlen = max( $strlen, strlen( $parameter ) );
+						}
+						foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
+							$ttout .= " |" . str_pad( $parameter, $strlen, " " ) . " = $value\n";
+						}
+					} else foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
 						$ttout .= "|" . str_replace( "{key}", $parameter,
 						                             str_replace( "{value}", $value, $mArray['link_template']['format']
 						                             )
@@ -2342,7 +2359,7 @@ abstract class Parser {
 				//Attach archives as needed
 				if( $mArray['has_archive'] === true ) {
 					//For archive templates.
-					if( $mArray['archive_type'] == "template" ) {
+					if( $mArray['archive_type'] == "template" || $mArray['archive_type'] == "template-swallow" ) {
 						if( $tlink['has_archive'] === true && $tlink['archive_type'] == "link" ) {
 							$ttout = str_replace( $mArray['old_archive'], $mArray['archive_url'], $ttout );
 						} else {
@@ -2354,7 +2371,9 @@ abstract class Parser {
 							if( isset( $mArray['archive_string'] ) ) {
 								$ttout = str_replace( $mArray['archive_string'], trim( $tttout ), $ttout );
 							} else {
-								$ttout .= $tttout;
+								if( $mArray['archive_type'] == "template" ) $ttout .= $tttout;
+								elseif( $mArray['archive_type'] == "template-swallow" ) $ttout =
+									str_replace( $tlink['link_string'], $tttout, $ttout );
 							}
 						}
 					}
@@ -2384,12 +2403,22 @@ abstract class Parser {
 			if( $link['link_type'] == "template" ) {
 				$out .= "{{" . $link['template']['name'];
 			} elseif( $link['link_type'] == "stray" ) $out .= "{{" . $mArray['link_template']['name'];
-			$out .= substr( $mArray['link_template']['format'],
-			                strpos( $mArray['link_template']['format'], "{value}" ) + 7
+			if( $mArray['link_template']['format'] == "multiline-pretty" ) $out .= "\n";
+			else $out .= substr( $mArray['link_template']['format'],
+			                     strpos( $mArray['link_template']['format'], "{value}" ) + 7
 			);
-			foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
+			if( $mArray['link_template']['format'] == "multiline-pretty" ) {
+				$strlen = 0;
+				foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
+					$strlen = max( $strlen, strlen( $parameter ) );
+				}
+				foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
+					$out .= " |" . str_pad( $parameter, $strlen, " " ) . " = $value\n";
+				}
+			} else foreach( $mArray['link_template']['parameters'] as $parameter => $value ) {
 				$out .= "|" . str_replace( "{key}", $parameter,
-				                           str_replace( "{value}", $value, $mArray['link_template']['format'] )
+				                           str_replace( "{value}", $value, $mArray['link_template']['format']
+				                           )
 					);
 			}
 			$out .= "}}";
@@ -2515,8 +2544,11 @@ abstract class Parser {
 		//re-enable error reporting
 		error_reporting( $errorSetting );
 
-		if( !empty( $formatting ) ) $returnArray['__FORMAT__'] = array_search( max( $formatting ), $formatting );
-		else $returnArray['__FORMAT__'] = "{key}={value} ";
+		if( !empty( $formatting ) ) {
+			$returnArray['__FORMAT__'] = array_search( max( $formatting ), $formatting );
+			if( count( $formatting > 4 ) && strpos( $returnArray['__FORMAT__'], "\n" ) !== false )
+				$returnArray['__FORMAT__'] = "multiline-pretty";
+		} else $returnArray['__FORMAT__'] = "{key}={value} ";
 
 		return $returnArray;
 	}
@@ -2885,6 +2917,14 @@ abstract class Parser {
 					}
 					if( $noPad === true ) {
 						$convertValue = trim( $convertValue );
+					}
+					break;
+				case "m":
+				case "-m":
+					if( strlen( $convertValue ) == 2 ) $noPad = true;
+					$convertValue = strftime( "%m", $time );
+					if( $noPad === true ) {
+						$convertValue = (string) (int) $convertValue;
 					}
 					break;
 				case "n":

@@ -533,14 +533,11 @@ function runCheckIfDead() {
 	if( !validateChecksum() ) return false;
 	if( !validateNotBlocked() ) return false;
 	$checkIfDead = new \Wikimedia\DeadlinkChecker\CheckIfDead();
-	if( isset( $loadedArguments['forceall'] ) && isset( $loadedArguments['forceallconfirm'] ) ) $sql =
-		"SELECT * FROM externallinks_fpreports LEFT JOIN externallinks_global ON externallinks_fpreports.report_url_id=externallinks_global.url_id LEFT JOIN externallinks_user ON externallinks_fpreports.report_user_id=externallinks_user.user_link_id AND externallinks_fpreports.wiki=externallinks_user.wiki LEFT JOIN externallinks_paywall on externallinks_global.paywall_id=externallinks_paywall.paywall_id WHERE `report_status` = '0';";
-	else $sql =
-		"SELECT * FROM externallinks_fpreports LEFT JOIN externallinks_global ON externallinks_fpreports.report_url_id=externallinks_global.url_id LEFT JOIN externallinks_user ON externallinks_fpreports.report_user_id=externallinks_user.user_link_id AND externallinks_fpreports.wiki=externallinks_user.wiki LEFT JOIN externallinks_paywall on externallinks_global.paywall_id=externallinks_paywall.paywall_id WHERE `report_status` = '0' AND NOT `report_version` = '" .
-		CHECKIFDEADVERSION . "';";
+	$sql = "SELECT * FROM externallinks_fpreports LEFT JOIN externallinks_global ON externallinks_fpreports.report_url_id=externallinks_global.url_id LEFT JOIN externallinks_user ON externallinks_fpreports.report_user_id=externallinks_user.user_link_id AND externallinks_fpreports.wiki=externallinks_user.wiki LEFT JOIN externallinks_paywall on externallinks_global.paywall_id=externallinks_paywall.paywall_id WHERE `report_status` = '0';";
 	$res = $dbObject->queryDB( $sql );
 	if( ( $result = mysqli_fetch_all( $res, MYSQLI_ASSOC ) ) !== false ) {
 		$mailinglist = [];
+		$alreadyReset = [];
 		do {
 			$toCheck = [];
 			$counter = 0;
@@ -552,6 +549,31 @@ function runCheckIfDead() {
 			}
 			$checkedResult = $checkIfDead->areLinksDead( $toCheck );
 			$errors = $checkIfDead->getErrors();
+			$counter = 0;
+			$escapedURLs = [];
+			foreach( $result as $reportedFP ) {
+				$counter++;
+				if( $reportedFP['paywall_status'] == 3 || $reportedFP['live_state'] == 7 ||
+				    $checkedResult[$reportedFP['url']] === false
+				) {
+					if( $reportedFP['paywall_status'] != 3 && $reportedFP['live_state'] != 7 ) {
+						if( !in_array( $reportedFP['paywall_id'], $alreadyReset ) ) {
+							$escapedURLs[] = $reportedFP['paywall_id'];
+							$alreadyReset[] = $reportedFP['paywall_id'];
+						}
+					}
+				}
+				if( $counter >= 50 ) break;
+			}
+			if( !empty( $escapedURLs ) ) {
+				$sql = "UPDATE externallinks_global SET `live_state` = 3 WHERE `paywall_id` IN ( " .
+				       implode( ", ", $escapedURLs ) . " );";
+				if( !$dbObject->queryDB( $sql ) ) {
+					$mainHTML->setMessageBox( "danger", "{{{fpcheckifdeaderror}}}", "{{{unknownerror}}}" );
+
+					return false;
+				}
+			}
 			$counter = 0;
 			foreach( $result as $reportedFP ) {
 				$counter++;
@@ -814,7 +836,7 @@ function toggleBQStatus( $kill = false ) {
 }
 
 function reportFalsePositive( &$jsonOut = false ) {
-	global $loadedArguments, $dbObject, $userObject, $mainHTML, $oauthObject;
+	global $loadedArguments, $dbObject, $userObject, $mainHTML, $oauthObject, $checkIfDead;
 	if( !validateToken( $jsonOut ) ) return false;
 	if( !validatePermission( "reportfp", true, $jsonOut ) ) return false;
 	$checksum = $oauthObject->getChecksumToken();
@@ -833,6 +855,9 @@ function reportFalsePositive( &$jsonOut = false ) {
 			    $_SESSION['precheckedfplistsrorted']['toresethash'] ==
 			    md5( CONSUMERSECRET . ACCESSSECRET . implode( ":", $_SESSION['precheckedfplistsrorted']['toreset'] )
 			    ) &&
+			    $_SESSION['precheckedfplistsrorted']['towhitelisthash'] ==
+			    md5( CONSUMERSECRET . ACCESSSECRET . implode( ":", $_SESSION['precheckedfplistsrorted']['towhitelist'] )
+			    ) &&
 			    $_SESSION['precheckedfplistsrorted']['alreadyreportedhash'] ==
 			    md5( CONSUMERSECRET . ACCESSSECRET .
 			         implode( ":", $_SESSION['precheckedfplistsrorted']['alreadyreported'] )
@@ -847,6 +872,7 @@ function reportFalsePositive( &$jsonOut = false ) {
 			    md5( $_SESSION['precheckedfplistsrorted']['toreporthash'] .
 			         $_SESSION['precheckedfplistsrorted']['toreporterrorshash'] .
 			         $_SESSION['precheckedfplistsrorted']['toresethash'] .
+			         $_SESSION['precheckedfplistsrorted']['towhitelisthash'] .
 			         $_SESSION['precheckedfplistsrorted']['alreadyreportedhash'] .
 			         $_SESSION['precheckedfplistsrorted']['notfoundhash'] .
 			         $_SESSION['precheckedfplistsrorted']['notdeadhash'] . $checksum
@@ -856,6 +882,7 @@ function reportFalsePositive( &$jsonOut = false ) {
 				$toReport = $_SESSION['precheckedfplistsrorted']['toreport'];
 				$errors = $_SESSION['precheckedfplistsrorted']['toreporterrors'];
 				$toReset = $_SESSION['precheckedfplistsrorted']['toreset'];
+				$toWhitelist = $_SESSION['precheckedfplistsrorted']['towhitelist'];
 			}
 		} else {
 			$mainHTML->setMessageBox( "danger", "{{{reportfperror}}}", "{{{unknownerror}}}" );
@@ -881,12 +908,14 @@ function reportFalsePositive( &$jsonOut = false ) {
 			$jsonOut['missingvalue'] = "fplist";
 			$jsonOut['errormessage'] =
 				"The fplist is a newline seperated parameter of URLs that is required for this function.";
+
 			return false;
 		}
 
 		if( isset( $loadedArguments['fplist'] ) ) {
 			$toReport = [];
 			$toReset = [];
+			$toWhitelist = [];
 			$alreadyReported = [];
 			$escapedURLs = [];
 			$notDead = [];
@@ -919,17 +948,42 @@ function reportFalsePositive( &$jsonOut = false ) {
 			$checkIfDead = new \Wikimedia\DeadlinkChecker\CheckIfDead();
 			$results = $checkIfDead->areLinksDead( $urls );
 			$errors = $checkIfDead->getErrors();
+			$whitelisted = [];
+			if( USEADDITIONALSERVERS === true ) {
+				$toValidate = [];
+				foreach( $urls as $tid => $url ) {
+					if( $results[$url] === true ) {
+						$toValidate[] = $url;
+					}
+				}
+				if( !empty( $toValidate ) ) foreach( explode( "\n", CIDSERVERS ) as $server ) {
+					$serverResults = API::runCIDServer( $server, $toValidate );
+					$toValidate = array_flip( $toValidate );
+					foreach( $serverResults['results'] as $surl => $sResult ) {
+						if( $surl == "errors" ) continue;
+						if( $sResult === false ) {
+							$whitelisted[] = $surl;
+							unset( $toValidate[$surl] );
+						} else {
+							$errors[$surl] = $serverResults['results']['errors'][$surl];
+						}
+					}
+					$toValidate = array_flip( $toValidate );
+				}
+			}
+
 			foreach( $urls as $id => $url ) {
 				if( $results[$url] === false ) {
 					$toReset[] = $url;
 				} else {
-					$toReport[] = $url;
+					if( !in_array( $url, $whitelisted ) ) $toReport[] = $url;
+					else $toWhitelist[] = $url;
 				}
 			}
 		}
 	}
 
-	if( empty( $toReport ) && empty( $toReset ) ) {
+	if( empty( $toReport ) && empty( $toReset ) && empty( $toWhitelist ) ) {
 		if( $jsonOut === false ) $mainHTML->setMessageBox( "danger", "{{{reportfperror}}}", "{{{nofpurlerror}}}" );
 		else {
 			header( "HTTP/1.1 400 Bad Request", true, 400 );
@@ -941,15 +995,18 @@ function reportFalsePositive( &$jsonOut = false ) {
 			$jsonOut['notdead'] = $notDead;
 			$jsonOut['notfound'] = $notfound;
 			$jsonOut['alreadyreported'] = $alreadyReported;
+			$jsonOut['towhitelist'] = $toWhitelist;
 		}
 
 		return false;
 	}
 	$escapedURLs = [];
-	foreach( array_merge( $toReset, $toReport ) as $url ) {
+	foreach( array_merge( $toReset, $toReport, $toWhitelist ) as $url ) {
 		$escapedURLs[] = $dbObject->sanitize( $url );
 	}
-	$sql = "SELECT * FROM externallinks_global WHERE `url` IN ( '" . implode( "', '", $escapedURLs ) . "' );";
+	$sql =
+		"SELECT * FROM externallinks_global LEFT JOIN externallinks_paywall ON externallinks_global.paywall_id=externallinks_paywall.paywall_id WHERE `url` IN ( '" .
+		implode( "', '", $escapedURLs ) . "' );";
 	$res = $dbObject->queryDB( $sql );
 	while( $result = mysqli_fetch_assoc( $res ) ) {
 		$URLCache[$result['url']] = $result;
@@ -977,20 +1034,57 @@ function reportFalsePositive( &$jsonOut = false ) {
 	}
 	$escapedURLs = [];
 	foreach( $toReset as $report ) {
-		if( $URLCache[$report]['live_state'] != 0 ) {
+		if( $URLCache[$report]['paywall_status'] == 3 ) {
+			continue;
+		} elseif( $URLCache[$report]['live_state'] != 0 ) {
+			continue;
+		} elseif( in_array( $URLCache[$report]['paywall_id'], $escapedURLs ) ) {
 			continue;
 		} else {
-			$escapedURLs[] = $URLCache[$report]['url_id'];
+			$escapedURLs[] = $URLCache[$report]['paywall_id'];
 		}
 	}
 	if( !empty( $escapedURLs ) ) {
-		$sql = "UPDATE externallinks_global SET `live_state` = 3 WHERE `url_id` IN ( " .
+		$sql = "UPDATE externallinks_global SET `live_state` = 3 WHERE `paywall_id` IN ( " .
 		       implode( ", ", $escapedURLs ) . " );";
 		if( $dbObject->queryDB( $sql ) ) {
 			foreach( $toReset as $reset ) {
-				$dbObject->insertLogEntry( "global", WIKIPEDIA, "urldata", "changestate",
+				$dbObject->insertLogEntry( "global", WIKIPEDIA, "domaindata", "changestate",
 				                           $URLCache[$reset]['url_id'],
-				                           $reset, $userObject->getUserLinkID(), 0, 3
+				                           $checkIfDead->parseURL( $reset )['host'], $userObject->getUserLinkID(), -1, 3
+				);
+			}
+		} else {
+			if( $jsonOut === false ) $mainHTML->setMessageBox( "danger", "{{{reportfperror}}}", "{{{unknownerror}}}" );
+			else {
+				header( "HTTP/1.1 520 Unknown Error", true, 520 );
+				$jsonOut['result'] = "fail";
+				$jsonOut['reportfperror'] = "unknownerror";
+				$jsonOut['errormessage'] = "An unknown error occurred.";
+			}
+
+			return false;
+		}
+	}
+	$escapedURLs = [];
+	foreach( $toWhitelist as $report ) {
+		if( $URLCache[$report]['paywall_status'] == 3 ) {
+			continue;
+		} elseif( in_array( $URLCache[$report]['paywall_id'], $escapedURLs ) ) {
+			continue;
+		} else {
+			$escapedURLs[] = $URLCache[$report]['paywall_id'];
+		}
+	}
+	if( !empty( $escapedURLs ) ) {
+		$sql = "UPDATE externallinks_paywall SET `paywall_status` = 3 WHERE `paywall_id` IN ( " .
+		       implode( ", ", $escapedURLs ) . " );";
+		if( $dbObject->queryDB( $sql ) ) {
+			foreach( $toWhitelist as $reset ) {
+				$dbObject->insertLogEntry( "global", WIKIPEDIA, "domaindata", "changeglobalstate",
+				                           $URLCache[$reset]['paywall_id'],
+				                           $checkIfDead->parseURL( $reset )['host'], $userObject->getUserLinkID(),
+				                           $URLCache[$reset]['paywall_status'], 3
 				);
 			}
 		} else {
@@ -1129,7 +1223,7 @@ function changePreferences() {
 		$toChange['user_default_theme'] = $userObject->setTheme( $loadedArguments['user_default_theme'] );
 	}
 	if( isset( $loadedArguments['user_global_language'] ) ) {
-		if( isset( $interfaceLanguages[$loadedArguments['user_global_language']] ) ) {
+		if( isset( $_SESSION['intLanguages']['languages'][$loadedArguments['user_global_language']] ) ) {
 			$toChange['user_default_language'] = $loadedArguments['user_global_language'];
 		} elseif( $loadedArguments['user_global_language'] == "null" ) {
 			$toChange['user_default_language'] = null;
@@ -1295,8 +1389,9 @@ function changeURLData( &$jsonOut = false ) {
 				}
 			}
 			if( ( empty( $loadedArguments['archiveurl'] ) ? "" :
-				    $checkIfDead->sanitizeURL( $loadedArguments['archiveurl'], true, true ) ) !=
-			    ( is_null( $result['archive_url'] ) ? null : $checkIfDead->sanitizeURL( $result['archive_url'], true, true ) )
+					$checkIfDead->sanitizeURL( $loadedArguments['archiveurl'], true, true ) ) !=
+			    ( is_null( $result['archive_url'] ) ? null :
+				    $checkIfDead->sanitizeURL( $result['archive_url'], true, true ) )
 			) {
 				if( !validatePermission( "alterarchiveurl", true, $jsonOut ) ) return false;
 				if( !empty( $loadedArguments['archiveurl'] ) &&
@@ -1304,7 +1399,7 @@ function changeURLData( &$jsonOut = false ) {
 				) {
 					if( !isset( $loadedArguments['overridearchivevalidation'] ) ||
 					    ( $loadedArguments['overridearchivevalidation'] != "on" &&
-					    $loadedArguments['overridearchivevalidation'] != 1 )
+					      $loadedArguments['overridearchivevalidation'] != 1 )
 					) {
 						if( isset( $data['archive_type'] ) && $data['archive_type'] == "invalid" ) {
 							if( $jsonOut === false ) $mainHTML->setMessageBox( "danger", "{{{urldataerror}}}",
@@ -1372,6 +1467,7 @@ function changeURLData( &$jsonOut = false ) {
 				$jsonOut['urldataerror'] = "404";
 				$jsonOut['errormesage'] = "The URL was not found in the DB.";
 			}
+
 			return false;
 		}
 
@@ -1627,18 +1723,18 @@ function analyzePage( &$jsonOut = false ) {
 		return false;
 	}
 	$parts = $checkIfDead->parseURL( $loadedArguments['pagesearch'] );
-	if( $accessibleWikis[WIKIPEDIA]['rooturl'] == "https://".$parts['host']."/" ) {
+	if( $accessibleWikis[WIKIPEDIA]['rooturl'] == "https://" . $parts['host'] . "/" ) {
 		if( $parts['path'] == "/w/index.php" ) {
 			$query = explode( "&", $parts['query'] );
 			foreach( $query as $item ) {
 				$item = explode( "=", $item, 2 );
 				if( $item[0] == "title" ) {
-					$loadedArguments['pagesearch'] = $item[1];
+					$loadedArguments['pagesearch'] = urldecode( $item[1] );
 					break;
 				}
 			}
 		} elseif( strpos( $parts['path'], "/wiki/" ) !== false ) {
-			$loadedArguments['pagesearch'] = str_replace( "/wiki/", "", $parts['path'] );
+			$loadedArguments['pagesearch'] = urldecode( str_replace( "/wiki/", "", $parts['path'] ) );
 		}
 	}
 	$ch = curl_init();
@@ -1801,13 +1897,13 @@ function submitBotJob( &$jsonOut = false ) {
 
 		foreach( $pages as $page ) {
 			if( strpos( $page, ":" ) !== false ) {
-				if( $catPages = API::getArticlesFromCategory( [$page] ) ) {
+				if( $catPages = API::getArticlesFromCategory( [ $page ] ) ) {
 					foreach( $catPages as $catPage ) {
 						if( !in_array( ucfirst( $catPage['title'] ), $pages ) ) {
 							$pages[] = ucfirst( $catPage['title'] );
 						}
 					}
-					unset( $pages[array_search($page, $pages)] );
+					unset( $pages[array_search( $page, $pages )] );
 				}
 			}
 		}

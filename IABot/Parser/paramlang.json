@@ -104,7 +104,11 @@
 	  "pages",
 	  "at"
 	],
-	"url": "url",
+	"url": [
+	  "url",
+	  "chapter-url",
+	  "chapterurl"
+	],
 	"accessdate": [
 	  "accessdate",
 	  "access-date"
@@ -297,12 +301,16 @@
 	  "archivedate": "archivedate",
 	  "templatename": "cite web",
 	  "deadurl": "brisé le",
-	  "deadurlyes": "oui",
+	  "deadurlyes": false,
 	  "deadurlno": false,
+	  "deadurlusurp": false,
 	  "templatename": "lien web"
 	},
 	"localizationoverrides": {
-	  "df": false
+	  "df": false,
+	  "deadurlyes": false,
+	  "deadurlno": false,
+	  "deadurlusurp": false
 	}
   },
   "it": {
@@ -354,7 +362,10 @@
 	"url": "url",
 	"accessdate": "accesso",
 	"archiveurl": "urlarchivio",
-	"deadurl": "urlmorto",
+	"deadurl": [
+	  "urlmorto",
+	  "deadurl"
+	],
 	"archivedate": "dataarchivio",
 	"quote": "citazione",
 	"editors": "editore",
@@ -368,7 +379,7 @@
 	  "archivedate": "dataarchivio",
 	  "templatename": "cita web",
 	  "deadurl": "urlmorto",
-	  "deadurlyes": "yes",
+	  "deadurlyes": "sì",
 	  "deadurlno": "no"
 	}
   },
@@ -676,7 +687,7 @@
 	},
 	"use": "en",
 	"localizationoverrides": {
-	  "deadurlusurp": false,
+	  "deadurl": false,
 	  "df": false
 	}
   },

@@ -561,7 +561,7 @@ function loadUserPage( $returnLoader = false ) {
 }
 
 function loadBotQueue( &$jsonOutAPI = false ) {
-	global $mainHTML, $userObject, $dbObject, $loadedArguments, $oauthObject;
+	global $mainHTML, $userObject, $dbObject, $loadedArguments, $oauthObject, $locales;
 	if( !validatePermission( "viewbotqueue", false ) ) {
 		loadPermissionError( "viewbotqueue", $jsonOutAPI );
 
@@ -665,16 +665,20 @@ function loadBotQueue( &$jsonOutAPI = false ) {
 					$statusHTML .= "info";
 				}
 				$statusHTML .= "\" role=\"progressbar\" aria-valuenow=\"";
+				$locale = setlocale( LC_ALL, "0" );
+				setlocale( LC_ALL, $locales['en'] );
 				$statusHTML .= $result['worker_finished'] / $result['worker_target'] * 100;
 				$statusHTML .= "\" aria-valuemin=\"0\" aria-valuemax=\"100\" style=\"width: ";
 				$statusHTML .= $percentage = $result['worker_finished'] / $result['worker_target'] * 100;
+				setlocale( LC_ALL, $locale );
 				$statusHTML .= "%\"><span id=\"progressbartext" . $result['queue_id'] .
 				               "\">{$result['worker_finished']}/{$result['worker_target']} (" .
 				               round( $percentage, 2 ) . "%)</span></div>
       </div>";
-
+				setlocale( LC_ALL, $locales['en'] );
 				$jsonOut[$result['queue_id']]['style'] = "width: $percentage%";
 				$jsonOut[$result['queue_id']]['aria-valuenow'] = $percentage;
+				setlocale( LC_ALL, $locale );
 				$jsonOut[$result['queue_id']]['progresstext'] =
 					"{$result['worker_finished']}/{$result['worker_target']} (" .
 					round( $percentage, 2 ) . "%)";
@@ -1102,6 +1106,7 @@ function loadFPReporter() {
 	) {
 		$toReport = [];
 		$toReset = [];
+		$toWhitelist = [];
 		$alreadyReported = [];
 		$escapedURLs = [];
 		$notDead = [];
@@ -1158,15 +1163,42 @@ function loadFPReporter() {
 		$checkIfDead = new \Wikimedia\DeadlinkChecker\CheckIfDead();
 		$results = $checkIfDead->areLinksDead( $urls );
 		$errors = $checkIfDead->getErrors();
+
+		$whitelisted = [];
+		if( USEADDITIONALSERVERS === true ) {
+			$toValidate = [];
+			foreach( $urls as $tid => $url ) {
+				if( $results[$url] === true ) {
+					$toValidate[] = $url;
+				}
+			}
+			if( !empty( $toValidate ) ) foreach( explode( "\n", CIDSERVERS ) as $server ) {
+				if( empty( $toValidate ) ) break;
+				$serverResults = API::runCIDServer( $server, $toValidate );
+				$toValidate = array_flip( $toValidate );
+				foreach( $serverResults['results'] as $surl => $sResult ) {
+					if( $surl == "errors" ) continue;
+					if( $sResult === false ) {
+						$whitelisted[] = $surl;
+						unset( $toValidate[$surl] );
+					} else {
+						$errors[$surl] = $serverResults['results']['errors'][$surl];
+					}
+				}
+				$toValidate = array_flip( $toValidate );
+			}
+		}
+
 		foreach( $urls as $id => $url ) {
 			if( $results[$url] === false ) {
 				$toReset[] = $url;
 			} else {
-				$toReport[] = $url;
+				if( !in_array( $url, $whitelisted ) ) $toReport[] = $url;
+				else $toWhitelist[] = $url;
 			}
 		}
 		$urlList = "";
-		foreach( $toReset as $url ) {
+		foreach( array_merge( $toReset, $toWhitelist ) as $url ) {
 			$urlList .= "<li><a href=\"" . htmlspecialchars( $url ) . "\">" . htmlspecialchars( $url ) . "</a></li>\n";
 		}
 		$bodyHTML->assignElement( "fplistbullet2", ( empty( $urlList ) ? "&mdash;" : $urlList ) );
@@ -1178,13 +1210,14 @@ function loadFPReporter() {
 		}
 		$bodyHTML->assignElement( "fplistbullet1", ( empty( $urlList ) ? "&mdash;" : $urlList ) );
 		if( empty( $urlList ) ) $bodyHTML->assignElement( "toreportdisplay", "none" );
-		if( empty( $toReport ) && empty( $toReset ) ) {
+		if( empty( $toReport ) && empty( $toReset ) && empty( $toWhitelist ) ) {
 			$bodyHTML->assignElement( "submitdisable", " disabled=\"disabled\"" );
 		}
 
 		$_SESSION['precheckedfplistsrorted']['toreport'] = $toReport;
 		$_SESSION['precheckedfplistsrorted']['toreporterrors'] = $errors;
 		$_SESSION['precheckedfplistsrorted']['toreset'] = $toReset;
+		$_SESSION['precheckedfplistsrorted']['towhitelist'] = $toWhitelist;
 		$_SESSION['precheckedfplistsrorted']['alreadyreported'] = $alreadyReported;
 		$_SESSION['precheckedfplistsrorted']['notfound'] = $notfound;
 		$_SESSION['precheckedfplistsrorted']['notdead'] = $notDead;
@@ -1194,6 +1227,8 @@ function loadFPReporter() {
 			md5( CONSUMERSECRET . ACCESSSECRET . implode( ":", $errors ) );
 		$_SESSION['precheckedfplistsrorted']['toresethash'] =
 			md5( CONSUMERSECRET . ACCESSSECRET . implode( ":", $toReset ) );
+		$_SESSION['precheckedfplistsrorted']['towhitelisthash'] =
+			md5( CONSUMERSECRET . ACCESSSECRET . implode( ":", $toWhitelist ) );
 		$_SESSION['precheckedfplistsrorted']['alreadyreportedhash'] =
 			md5( CONSUMERSECRET . ACCESSSECRET . implode( ":", $alreadyReported ) );
 		$_SESSION['precheckedfplistsrorted']['notfoundhash'] =
@@ -1203,6 +1238,7 @@ function loadFPReporter() {
 		$_SESSION['precheckedfplistsrorted']['finalhash'] = md5( $_SESSION['precheckedfplistsrorted']['toreporthash'] .
 		                                                         $_SESSION['precheckedfplistsrorted']['toreporterrorshash'] .
 		                                                         $_SESSION['precheckedfplistsrorted']['toresethash'] .
+		                                                         $_SESSION['precheckedfplistsrorted']['towhitelisthash'] .
 		                                                         $_SESSION['precheckedfplistsrorted']['alreadyreportedhash'] .
 		                                                         $_SESSION['precheckedfplistsrorted']['notfoundhash'] .
 		                                                         $_SESSION['precheckedfplistsrorted']['notdeadhash'] .
@@ -2388,7 +2424,7 @@ function loadBotQueuer() {
 }
 
 function loadJobViewer( &$jsonOutAPI = false ) {
-	global $mainHTML, $userObject, $loadedArguments, $dbObject;
+	global $mainHTML, $userObject, $loadedArguments, $dbObject, $locales;
 	if( $jsonOutAPI === false ) {
 		$bodyHTML = new HTMLLoader( "jobview", $userObject->getLanguage() );
 		$bodyHTML->loadWikisi18n();
@@ -2469,15 +2505,19 @@ function loadJobViewer( &$jsonOutAPI = false ) {
 						$statusHTML .= "info progress-bar-striped active";
 					}
 					$statusHTML .= "\" role=\"progressbar\" aria-valuenow=\"";
-					$statusHTML .= $result['worker_finished'] / $result['worker_target'] * 100;
-					$statusHTML .= "\" aria-valuemin=\"0\" aria-valuemax=\"100\" style=\"width: ";
+					$locale = setlocale( LC_ALL, "0" );
+					setlocale( LC_ALL, $locales['en'] );
 					$statusHTML .= $percentage = $result['worker_finished'] / $result['worker_target'] * 100;
+					$statusHTML .= "\" aria-valuemin=\"0\" aria-valuemax=\"100\" style=\"width: ";
+					$statusHTML .= $percentage;
+					setlocale( LC_ALL, $locale );
 					$statusHTML .= "%\"><span id=\"progressbartext\">{$result['worker_finished']}/{$result['worker_target']} (" .
 					               round( $percentage, 2 ) . "%)</span></div>
       </div>";
-
+					setlocale( LC_ALL, $locales['en'] );
 					$jsonOut['style'] = "width: $percentage%";
 					$jsonOut['aria-valuenow'] = $percentage;
+					setlocale( LC_ALL, $locale );
 					$jsonOut['progresstext'] =
 						"{$result['worker_finished']}/{$result['worker_target']} (" . round( $percentage, 2 ) . "%)";
 					$bodyHTML->assignElement( "bqprogress", $statusHTML );

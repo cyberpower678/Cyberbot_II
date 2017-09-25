@@ -64,6 +64,28 @@ class frwikiParser extends Parser {
 	}
 
 	/**
+	 * Parses a given refernce/external link string and returns details about it.
+	 *
+	 * @param string $linkString Primary reference string
+	 * @param string $remainder Left over stuff that may apply
+	 *
+	 * @access public
+	 * @author Maximilian Doerr (Cyberpower678)
+	 * @license https://www.gnu.org/licenses/gpl.txt
+	 * @copyright Copyright (c) 2015-2017, Maximilian Doerr
+	 * @return array    Details about the link
+	 */
+	public function getLinkDetails( $linkString, $remainder ) {
+		$returnArray = parent::getLinkDetails($linkString, $remainder );
+
+		if( isset( $returnArray['invalid_archive'] ) && $returnArray['archive_host'] == "wikiwix" ) {
+			$returnArray['ignore_iarchive_flag'] = true;
+		}
+
+		return $returnArray;
+	}
+
+	/**
 	 * Generates an appropriate archive template if it can.
 	 *
 	 * @access protected
@@ -119,7 +141,7 @@ class frwikiParser extends Parser {
 		$modifiedLinks["$tid:$id"]['link'] = $link['url'];
 		if( $link['link_type'] == "template" ) {
 			$link['newdata']['tag_type'] = "parameter";
-			$link['newdata']['link_template']['parameters']['brisé le'] = "oui";
+			$link['newdata']['link_template']['parameters']['brisé le'] = self::strtotime( '%-e %B %Y' );
 		} else {
 			$title = trim( str_replace( $link['original_url'] . (empty( $link['fragment'] ) === false ? "#" . $link['fragment'] : ""), "",
 			                       $link['link_string']
@@ -373,5 +395,32 @@ class frwikiParser extends Parser {
 		$string = preg_replace( '/(?:décembre)/i', "December", $string );
 
 		return strtotime( $string );
+	}
+
+	/**
+	 * Generates an appropriate citation template without altering existing parameters.
+	 *
+	 * @access protected
+	 * @author Maximilian Doerr (Cyberpower678)
+	 * @license https://www.gnu.org/licenses/gpl.txt
+	 * @copyright Copyright (c) 2015-2017, Maximilian Doerr
+	 *
+	 * @param $link Current link being modified
+	 * @param $temp Current temp result from fetchResponse
+	 *
+	 * @return bool If successful or not
+	 */
+	protected function generateNewCitationTemplate( &$link, $lang = "en" ) {
+		parent::generateNewCitationTemplate( $link, $lang );
+
+		if( $this->getCiteDefaultKey( "deadurl", $lang ) !== false ) {
+			if( ( $link['tagged_dead'] === true || $link['is_dead'] === true ) ) {
+				$link['newdata']['link_template']['parameters'][$this->getCiteActiveKey( "deadurl", $lang,
+				                                                                         $link['link_template'],
+				                                                                         true
+				)] = self::strtotime( '%-e %B %Y' );
+			}
+		}
+
 	}
 }
