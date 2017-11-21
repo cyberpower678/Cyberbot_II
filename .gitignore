@@ -250,3 +250,5 @@ IABot/InternetArchiveBotfrwikiInternetArchiveBot
 IABot/InternetArchiveBotjawikiInternetArchiveBot
 
 IABot/accessConfig.php
+
+IABot/www/setpath.php
