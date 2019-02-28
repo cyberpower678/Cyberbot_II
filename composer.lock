@@ -13,12 +13,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/neitanod/forceutf8.git",
-                "reference": "e1f383c7b5331b575c41c6e936e321095017cd35"
+                "reference": "30980a8ca2787a7730d370eac310b8987eb68229"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/neitanod/forceutf8/zipball/e1f383c7b5331b575c41c6e936e321095017cd35",
-                "reference": "e1f383c7b5331b575c41c6e936e321095017cd35",
+                "url": "https://api.github.com/repos/neitanod/forceutf8/zipball/30980a8ca2787a7730d370eac310b8987eb68229",
+                "reference": "30980a8ca2787a7730d370eac310b8987eb68229",
                 "shasum": ""
             },
             "require": {
@@ -31,6 +31,9 @@
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "BSD-3-Clause"
+            ],
             "authors": [
                 {
                     "name": "Sebastián Grignoli",
@@ -39,7 +42,7 @@
             ],
             "description": "PHP Class Encoding featuring popular Encoding::toUTF8() function --formerly known as forceUTF8()-- that fixes mixed encoded strings.",
             "homepage": "https://github.com/neitanod/forceutf8",
-            "time": "2017-09-21 21:00:15"
+            "time": "2018-10-10 23:03:52"
         },
         {
             "name": "wikimedia/deadlinkchecker",
@@ -47,12 +50,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/wikimedia/DeadlinkChecker.git",
-                "reference": "00ffefb98530243a823c84c0523268d6b24c88b8"
+                "reference": "15ceab440c66e253c76521ef5f96d4b36a85fbc9"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/00ffefb98530243a823c84c0523268d6b24c88b8",
-                "reference": "00ffefb98530243a823c84c0523268d6b24c88b8",
+                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/15ceab440c66e253c76521ef5f96d4b36a85fbc9",
+                "reference": "15ceab440c66e253c76521ef5f96d4b36a85fbc9",
                 "shasum": ""
             },
             "require": {
@@ -110,7 +113,7 @@
                 "source": "https://github.com/wikimedia/DeadlinkChecker/tree/master",
                 "issues": "https://github.com/wikimedia/DeadlinkChecker/issues"
             },
-            "time": "2018-02-26 00:42:11"
+            "time": "2019-02-27 03:27:13"
         }
     ],
     "packages-dev": [],
