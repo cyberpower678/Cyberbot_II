@@ -13,12 +13,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/neitanod/forceutf8.git",
-                "reference": "30980a8ca2787a7730d370eac310b8987eb68229"
+                "reference": "c4222087168fe8476bde930e2ad04d111f36f53b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/neitanod/forceutf8/zipball/30980a8ca2787a7730d370eac310b8987eb68229",
-                "reference": "30980a8ca2787a7730d370eac310b8987eb68229",
+                "url": "https://api.github.com/repos/neitanod/forceutf8/zipball/c4222087168fe8476bde930e2ad04d111f36f53b",
+                "reference": "c4222087168fe8476bde930e2ad04d111f36f53b",
                 "shasum": ""
             },
             "require": {
@@ -42,7 +42,7 @@
             ],
             "description": "PHP Class Encoding featuring popular Encoding::toUTF8() function --formerly known as forceUTF8()-- that fixes mixed encoded strings.",
             "homepage": "https://github.com/neitanod/forceutf8",
-            "time": "2018-10-10 23:03:52"
+            "time": "2019-04-05 04:08:01"
         },
         {
             "name": "wikimedia/deadlinkchecker",
@@ -50,12 +50,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/wikimedia/DeadlinkChecker.git",
-                "reference": "15ceab440c66e253c76521ef5f96d4b36a85fbc9"
+                "reference": "c17b4a86807cd16624b3b44c3aa7e4d8ae6c3994"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/15ceab440c66e253c76521ef5f96d4b36a85fbc9",
-                "reference": "15ceab440c66e253c76521ef5f96d4b36a85fbc9",
+                "url": "https://api.github.com/repos/wikimedia/DeadlinkChecker/zipball/c17b4a86807cd16624b3b44c3aa7e4d8ae6c3994",
+                "reference": "c17b4a86807cd16624b3b44c3aa7e4d8ae6c3994",
                 "shasum": ""
             },
             "require": {
@@ -113,7 +113,7 @@
                 "source": "https://github.com/wikimedia/DeadlinkChecker/tree/master",
                 "issues": "https://github.com/wikimedia/DeadlinkChecker/issues"
             },
-            "time": "2019-02-27 03:27:13"
+            "time": "2019-05-23 20:36:54"
         }
     ],
     "packages-dev": [],
