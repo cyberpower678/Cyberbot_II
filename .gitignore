@@ -238,3 +238,5 @@ IABot/generateCiteList.php
 IABot/sessions.config.local.inc.php
 
 IABot/accessConfig.php
+
+IABot/www/setpath.php
