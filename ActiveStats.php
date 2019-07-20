@@ -39,9 +39,9 @@ while(true) {
 	foreach( $admins as $user ) {
 		echo "Fetching administrator \"{$user['name']}\"...\n";
 		if( $user['name'] != str_ireplace( '(WM','',$user['name']) ) continue;
-		$tmp = mysqli_query( $db, "SELECT user_id FROM user WHERE `user_name` = '{$user['name']}';" );
+		$tmp = mysqli_query( $db, "SELECT actor_id FROM actor_user WHERE `actor_name` = '{$user['name']}';" );
 		$uid = mysqli_fetch_assoc( $tmp );
-		$uid = $uid['user_id'];
+		$uid = $uid['actor_id'];
 		mysqli_free_result( $tmp );
 		$logquery['letitle'] = "User:".$user['name'];
 		$result = $site->listHandler( $logquery );
@@ -65,7 +65,7 @@ while(true) {
 		}
 		$temp = 0;
 		foreach( $bureaucrats as $user2 ) if( $user['userid'] == $user2['userid'] )  {
-			 $sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('delete', 'block', 'protect') AND `log_timestamp` > '$timestamp';";
+			 $sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('delete', 'block', 'protect') AND `log_timestamp` > '$timestamp';";
 			 $logquery['leend'] = date( 'Ymdhis', strtotime('-6 months', time()) );
 			 unset( $logquery['letitle'] );
 			 $logquery['leuser'] = $user['name'];
@@ -85,9 +85,9 @@ while(true) {
 			 unset( $logquery['leend'] );
 			 unset( $logquery['leuser'] );
 			 break;
-		} else $sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('delete', 'block', 'rights', 'protect') AND `log_timestamp` > '$timestamp';";
-		if( !isset( $adminright[$user['name']] ) ) $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('delete', 'block', 'rights', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
-		else $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('delete', 'block', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
+		} else $sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('delete', 'block', 'rights', 'protect') AND `log_timestamp` > '$timestamp';";
+		if( !isset( $adminright[$user['name']] ) ) $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('delete', 'block', 'rights', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
+		else $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('delete', 'block', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
 		$tmp = mysqli_query( $db, $sql );
 		$res = mysqli_fetch_assoc( $tmp );
 		$res = $res['count'];
@@ -110,9 +110,9 @@ while(true) {
 		echo "Fetching bureaucrat \"{$user['name']}\"...\n";
 		if( $user['name'] != str_ireplace( '(WM','',$user['name']) ) continue;
 		$temp = 0;
-		$tmp = mysqli_query( $db, "SELECT user_id FROM user WHERE `user_name` = '{$user['name']}';" );
+		$tmp = mysqli_query( $db, "SELECT actor_id FROM actor_user WHERE `actor_name` = '{$user['name']}';" );
 		$uid = mysqli_fetch_assoc( $tmp );
-		$uid = $uid['user_id'];
+		$uid = $uid['actor_id'];
 		mysqli_free_result( $tmp );
 		$logquery['letitle'] = "User:".$user['name'];
 		$result = $site->listHandler( $logquery );
@@ -135,8 +135,8 @@ while(true) {
 		if( $since == "" ) {
 			$since = "Unknown";
 		}
-		$sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('renameuser') AND `log_timestamp` > '$timestamp';";
-		$sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('delete', 'block', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
+		$sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('renameuser') AND `log_timestamp` > '$timestamp';";
+		$sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('delete', 'block', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
 		$tmp = mysqli_query( $db, $sql );
 		$res = mysqli_fetch_assoc( $tmp );
 		$res = $res['count'];
@@ -158,9 +158,9 @@ while(true) {
 	foreach( $oversighters as $user ) {
 		echo "Fetching oversighter \"{$user['name']}\"...\n";
 		if( $user['name'] != str_ireplace( '(WM','',$user['name']) ) continue;
-		$tmp = mysqli_query( $db, "SELECT user_id FROM user WHERE `user_name` = '{$user['name']}';" );
+		$tmp = mysqli_query( $db, "SELECT actor_id FROM actor_user WHERE `actor_name` = '{$user['name']}';" );
 		$uid = mysqli_fetch_assoc( $tmp );
-		$uid = $uid['user_id'];
+		$uid = $uid['actor_id'];
 		mysqli_free_result( $tmp );
 		$temp = 0;
 		$logquery['letitle'] = "User:".$user['name']."@wikidatawiki";
@@ -173,9 +173,9 @@ while(true) {
 		if( $since == "" ) {
 			$since = "Unknown";
 		}
-		$sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('suppress') AND `log_timestamp` > '$timestamp';";
-		if( !isset( $adminright[$user['name']] ) ) $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('delete', 'block', 'rights', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
-		else $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_user` = '$uid' AND `log_type` in ('delete', 'block', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
+		$sql2 = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('suppress') AND `log_timestamp` > '$timestamp';";
+		if( !isset( $adminright[$user['name']] ) ) $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('delete', 'block', 'rights', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
+		else $sql = "SELECT COUNT(*) AS count FROM logging_userindex WHERE `log_actor` = '$uid' AND `log_type` in ('delete', 'block', 'protect', 'renameuser', 'suppress') AND `log_timestamp` > '$timestamp';";
 		$tmp = mysqli_query( $db, $sql );
 		$res = mysqli_fetch_assoc( $tmp );
 		$res = $res['count'];
