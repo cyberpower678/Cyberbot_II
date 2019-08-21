@@ -1,3 +1,5 @@
+var currentOffset = $('#jobpages').data('pagesOffset');
+
 function changeCheckboxes(value) {
     var inputs = document.getElementsByTagName('input');
     var list = [];
@@ -99,18 +101,6 @@ function resetEmailForm() {
     $('#emailconfirmtext').text("");
 }
 
-(function (h, o, t, j, a, r) {
-    h.hj = h.hj || function () {
-        (h.hj.q = h.hj.q || []).push(arguments)
-    };
-    h._hjSettings = {hjid: 370938, hjsv: 5};
-    a = o.getElementsByTagName('head')[0];
-    r = o.createElement('script');
-    r.async = 1;
-    r.src = t + h._hjSettings.hjid + j + h._hjSettings.hjsv;
-    a.appendChild(r);
-})(window, document, '//static.hotjar.com/c/hotjar-', '.js?sv=');
-
 function validateEmail(savedemail, success, warning, error) {
     var x = $('#email').val();
     if (x == '') {
@@ -132,7 +122,7 @@ function validateEmail(savedemail, success, warning, error) {
 }
 
 function loadBotQueue(getString) {
-    $.getJSON("index.php?format=json&".concat(getString),
+    $.getJSON("index.php?format=json".concat(getString),
         function (data) {
             if (data == null || data == false) {
                 setTimeout("loadBotQueue('".concat(getString.concat("')")), 10000);
@@ -163,7 +153,7 @@ function loadBotQueue(getString) {
 }
 
 function loadBotJob(getString) {
-    $.getJSON("index.php?format=json&".concat(getString),
+    $.getJSON("index.php?format=json&offset="+currentOffset+"&".concat(getString),
         function (data) {
             if (data == null || data == false) {
                 setTimeout("location.reload()", 10000);
@@ -193,7 +183,45 @@ function loadBotJob(getString) {
                 }
 
                 $('#buttonhtml').html(data['buttonhtml']);
-                $('#jobpages').html(data['pagelist']);
+
+                var page;
+                var stateStyleColor;
+                var stateClassName;
+                var stateGlyphName;
+                for (var key in data['pages']) {
+                    if (data['pages'].hasOwnProperty(key)) {
+                        page = data['pages'][key];
+
+                        // Built the new UI
+                        if (page['status'] === 'complete') {
+                            stateStyleColor = '#62C462';
+                            stateClassName = 'has-success';
+                            stateGlyphName = 'glyphicon-ok-sign';
+                        } else if (page['status'] === 'skipped') {
+                            stateStyleColor = '#EE5F5B';
+                            stateClassName = 'has-error';
+                            stateGlyphName = 'glyphicon-remove-sign';
+                        }
+                        $('#li' + key)
+                            .empty()
+                            .append($('<span>')
+                                .addClass(stateClassName)
+                                .append(
+                                    $('<label class="control-label">')
+                                        .append( $('<span class="glyphicon ' +
+                                    stateGlyphName + '"></span></label>') )
+                                        .append($('<a>')
+                                            .css({
+                                                'color': stateStyleColor
+                                            })
+                                            .attr('href', page['url'])
+                                            .text(' ' + page['page_title'])
+                                    )
+                                )
+                            );
+                    }
+                }
+                currentOffset = data['pages_processed'];
                 setTimeout("loadBotJob('".concat(getString.concat("')")), 5000);
             }
         })
@@ -212,4 +240,36 @@ $("a").click(function (event) {
         window.open(link, "IABotGUILinkedExternalLinkWindow");
         return false;
     }
+});
+
+// Preview the theme when changing it in the dropdown in the preferences
+$(function () {
+    var loadingLink;
+
+    $("#user_default_theme").on("change", function () {
+        var value = this.selectedOptions[0].dataset.theme || this.value;
+
+        // Another link is in the process of being shown. Remove it.
+        if (loadingLink) {
+            loadingLink.remove();
+        }
+
+        // Replace the linked CSS file.
+        var oldLink = $("link[rel=stylesheet][href*='bootstrap.min.css']");
+        $("html").addClass("theme-transition");
+
+        loadingLink = oldLink
+            .clone()
+            .prop("href", "static/" + value + "/css/bootstrap.min.css")
+            .on("load", function () {
+                oldLink.remove();
+                loadingLink = undefined;
+            })
+            .on("error", function () {
+                loadingLink.remove();
+                loadingLink = undefined;
+                $(".theme-transition").removeClass("theme-transition");
+            })
+            .insertAfter(oldLink);
+    });
 });
