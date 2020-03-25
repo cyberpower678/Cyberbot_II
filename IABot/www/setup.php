@@ -208,6 +208,8 @@ if( isset( $_POST['action'] ) && $_POST['action'] == "submitvalues" ) {
 							);
 							goto finishSetupLoad;
 						}
+					case "usewikidb":
+						break;
 					case "runpage":
 					case "nobots":
 						if( !isset( $loadedArguments[$key] ) ) {
