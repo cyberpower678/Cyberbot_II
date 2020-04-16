@@ -1,9 +1,10 @@
 {
 	"@metadata": {
 		"authors": [
+			"Abijeet Patro",
 			"Fitoschido",
-			"Ssola",
-			"MarionaDSR"
+			"MarionaDSR",
+			"Ssola"
 		]
 	},
 	"consolename": "Interfície de gestió de l'IABot",
