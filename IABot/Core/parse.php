@@ -398,10 +398,8 @@ class Parser {
 						     count( $this->commObject->getRevTextHistory( $botID ) ) . " revisions...\n";
 						foreach( $this->commObject->getRevTextHistory( $botID ) as $revID => $text ) {
 							echo "\tAnalyzing revision $revID...\n";
-							if( $this->commObject->config['link_scan'] == 0 && !isset( $oldLinks[$revID] ) ) {
-								$oldLinks[$revID] = new Memory( $this->getExternalLinks( false, false, $text['*'] ) );
-							} elseif( !isset( $oldLinks[$revID] ) ) {
-								$oldLinks[$revID] = new Memory( $this->getExternalLinks( true, false, $text['*'] ) );
+							if ( !isset( $oldLinks[$revID] ) ) {
+								$oldLinks[$revID] = new Memory($this->getExternalLinks($referencesOnly, false, $text['*']));
 							}
 						}
 
