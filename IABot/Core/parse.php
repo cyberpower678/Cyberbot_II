@@ -186,12 +186,13 @@ class Parser {
 		}
 
 		if( $this->commObject->config['link_scan'] == 0 ) {
-            echo "Fetching all external links...\n";
-            $referencesOnly = false;
-        } else {
-            echo "Fetching all references...\n";
-            $referencesOnly = true;
-        }
+			echo "Fetching all external links...\n";
+			$referencesOnly = false;
+		} else {
+			echo "Fetching all references...\n";
+			$referencesOnly = true;
+		}
+
 		$links = $this->getExternalLinks( $referencesOnly, false, $webRequest );
 		if( $links === false && $webRequest === true ) return false;
 		if( isset( $lastRevTexts ) ) foreach( $lastRevTexts as $id => $lastRevText ) {
