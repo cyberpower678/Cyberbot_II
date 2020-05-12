@@ -196,7 +196,7 @@ class Parser {
 		$links = $this->getExternalLinks( $referencesOnly, false, $webRequest );
 		if( $links === false && $webRequest === true ) return false;
 		if( isset( $lastRevTexts ) ) foreach( $lastRevTexts as $id => $lastRevText ) {
-			$lastRevLinks[$id] = new Memory( $this->getExternalLinks( $referencesOnly, $lastRevText->get( true ) ) );
+			$lastRevLinks[$id] = new Memory( $this->getExternalLinks( $referencesOnly, false, $lastRevText->get( true ) ) );
 		}
 		$analyzed = $links['count'];
 		unset( $links['count'] );
