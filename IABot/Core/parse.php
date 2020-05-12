@@ -186,19 +186,16 @@ class Parser {
 		}
 
 		if( $this->commObject->config['link_scan'] == 0 ) {
-			echo "Fetching all external links...\n";
-			$links = $this->getExternalLinks( false, false, $webRequest );
+            echo "Fetching all external links...\n";
+            $referencesOnly = false;
+        } else {
+            echo "Fetching all references...\n";
+            $referencesOnly = true;
+        }
+			$links = $this->getExternalLinks( $referencesOnly, false, $webRequest );
 			if( $links === false && $webRequest === true ) return false;
 			if( isset( $lastRevTexts ) ) foreach( $lastRevTexts as $id => $lastRevText ) {
-				$lastRevLinks[$id] = new Memory( $this->getExternalLinks( false, $lastRevText->get( true ) ) );
-			}
-		} else {
-			echo "Fetching all references...\n";
-			$links = $this->getReferences( false, $webRequest );
-			if( $links === false && $webRequest === true ) return false;
-			if( isset( $lastRevTexts ) ) foreach( $lastRevTexts as $id => $lastRevText ) {
-				$lastRevLinks[$id] = new Memory( $this->getReferences( false, $lastRevText->get( true ) ) );
-
+				$lastRevLinks[$id] = new Memory( $this->getExternalLinks( $referencesOnly, $lastRevText->get( true ) ) );
 			}
 		}
 		$analyzed = $links['count'];
@@ -402,9 +399,9 @@ class Parser {
 						foreach( $this->commObject->getRevTextHistory( $botID ) as $revID => $text ) {
 							echo "\tAnalyzing revision $revID...\n";
 							if( $this->commObject->config['link_scan'] == 0 && !isset( $oldLinks[$revID] ) ) {
-								$oldLinks[$revID] = new Memory( $this->getExternalLinks( false, $text['*'] ) );
+								$oldLinks[$revID] = new Memory( $this->getExternalLinks( false, false, $text['*'] ) );
 							} elseif( !isset( $oldLinks[$revID] ) ) {
-								$oldLinks[$revID] = new Memory( $this->getReferences( false, $text['*'] ) );
+								$oldLinks[$revID] = new Memory( $this->getExternalLinks( true, false, $text['*'] ) );
 							}
 						}
 
@@ -3404,21 +3401,6 @@ class Parser {
 		}
 
 		return $links;
-	}
-
-	/**
-	 * Fetches all references only
-	 *
-	 * @param string Page text to analyze
-	 *
-	 * @access public
-	 * @return array Details about every reference found
-	 * @license https://www.gnu.org/licenses/gpl.txt
-	 * @copyright Copyright (c) 2015-2018, Maximilian Doerr
-	 * @author Maximilian Doerr (Cyberpower678)
-	 */
-	public function getReferences( $text = false, $webRequest = false ) {
-		return $this->getExternallinks( true, $text, $webRequest );
 	}
 
 	/**
